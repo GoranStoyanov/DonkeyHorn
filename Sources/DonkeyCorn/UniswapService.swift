@@ -49,6 +49,7 @@ final class UniswapService: ObservableObject {
 
         isLoading = true
         lastError = nil
+        LogStore.shared.log("refresh started", level: .info)
 
         let eth = EthereumClient(rpcURL: rpcURL)
 
@@ -62,6 +63,7 @@ final class UniswapService: ObservableObject {
 
         let errors = [r3.error, r4.error].compactMap { $0 }
         lastError = errors.isEmpty ? nil : errors.joined(separator: "\n")
+        if let err = lastError { LogStore.shared.log(err, level: .error) }
 
         if all.isEmpty {
             titleText = "🦄 $0.00"
@@ -69,6 +71,7 @@ final class UniswapService: ObservableObject {
             titleText = String(format: "🦄 $%.2f", r3.feesUSD + r4.feesUSD)
         }
 
+        LogStore.shared.log("refresh done — v3: \(r3.positions.count) positions, v4: \(r4.positions.count) positions", level: .info)
         isLoading = false
     }
 

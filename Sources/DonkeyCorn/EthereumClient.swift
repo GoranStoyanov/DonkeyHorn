@@ -57,14 +57,21 @@ struct EthereumClient {
         req.httpBody = body
         req.timeoutInterval = 30
 
+        log("getLogs → \(short(address)) \(fromBlock)–\(toBlock)", level: .request)
+
         let (responseData, _) = try await URLSession.shared.data(for: req)
         guard let json = try? JSONSerialization.jsonObject(with: responseData) as? [String: Any] else {
+            log("getLogs ← bad JSON", level: .error)
             throw Err.badJSON
         }
         if let err = json["error"] as? [String: Any] {
-            throw Err.rpc(err["message"] as? String ?? "unknown error")
+            let msg = err["message"] as? String ?? "unknown error"
+            log("getLogs ← error: \(msg)", level: .error)
+            throw Err.rpc(msg)
         }
-        return json["result"] as? [[String: Any]] ?? []
+        let result = json["result"] as? [[String: Any]] ?? []
+        log("getLogs ← \(result.count) events", level: .response)
+        return result
     }
 
     func ethCall(to: String, data: Data) async throws -> Data {
@@ -81,17 +88,40 @@ struct EthereumClient {
         req.httpBody = body
         req.timeoutInterval = 15
 
+        let selector = data.count >= 4 ? data.prefix(4).hexString : data.hexString
+        log("eth_call → \(short(to)) \(selector)", level: .request)
+
         let (responseData, _) = try await URLSession.shared.data(for: req)
 
         guard let json = try? JSONSerialization.jsonObject(with: responseData) as? [String: Any] else {
+            log("eth_call ← bad JSON", level: .error)
             throw Err.badJSON
         }
         if let err = json["error"] as? [String: Any] {
-            throw Err.rpc(err["message"] as? String ?? "unknown error")
+            let msg = err["message"] as? String ?? "unknown error"
+            log("eth_call ← error: \(msg)", level: .error)
+            throw Err.rpc(msg)
         }
-        guard let result = json["result"] as? String else { throw Err.noResult }
+        guard let result = json["result"] as? String else {
+            log("eth_call ← no result", level: .error)
+            throw Err.noResult
+        }
 
         let hex = result.hasPrefix("0x") ? String(result.dropFirst(2)) : result
-        return Data(hexString: hex) ?? Data()
+        let resultData = Data(hexString: hex) ?? Data()
+        log("eth_call ← \(resultData.count)B", level: .response)
+        return resultData
+    }
+
+    // MARK: - Helpers
+
+    private func short(_ addr: String) -> String {
+        let a = addr.hasPrefix("0x") ? addr : "0x\(addr)"
+        guard a.count >= 10 else { return a }
+        return "\(a.prefix(6))…\(a.suffix(4))"
+    }
+
+    private func log(_ message: String, level: LogLevel) {
+        Task { @MainActor in LogStore.shared.log(message, level: level) }
     }
 }

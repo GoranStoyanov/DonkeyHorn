@@ -3,11 +3,14 @@ import SwiftUI
 struct MenuBarContentView: View {
     @EnvironmentObject var service: UniswapService
     @State private var showSettings = false
+    @State private var showLogs     = false
 
     var body: some View {
         if showSettings {
             SettingsView(onDismiss: { showSettings = false })
                 .environmentObject(service)
+        } else if showLogs {
+            LogsView(onDismiss: { showLogs = false })
         } else {
             VStack(spacing: 0) {
                 header
@@ -112,6 +115,12 @@ struct MenuBarContentView: View {
                 showSettings = true
             } label: {
                 Label("Settings", systemImage: "gear")
+            }
+            Spacer()
+            Button {
+                showLogs = true
+            } label: {
+                Label("Logs", systemImage: "list.bullet")
             }
             Spacer()
             Button("Quit") { NSApp.terminate(nil) }

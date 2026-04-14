@@ -5,7 +5,10 @@ final class AppSettings: ObservableObject {
     static let shared = AppSettings()
 
     @Published var walletAddress: String {
-        didSet { UserDefaults.standard.set(walletAddress, forKey: "walletAddress") }
+        didSet {
+            UserDefaults.standard.set(walletAddress, forKey: "walletAddress")
+            if walletAddress != oldValue { Task { @MainActor in LogStore.shared.clear() } }
+        }
     }
     @Published var rpcURL: String {
         didSet { UserDefaults.standard.set(rpcURL, forKey: "rpcURL") }
