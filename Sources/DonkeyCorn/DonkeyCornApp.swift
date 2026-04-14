@@ -13,10 +13,5 @@ struct DonkeyCornApp: App {
             Text(service.titleText)
         }
         .menuBarExtraStyle(.window)
-
-        Settings {
-            SettingsView()
-                .environmentObject(service)
-        }
     }
 }

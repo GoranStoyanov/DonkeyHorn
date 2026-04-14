@@ -17,8 +17,26 @@ struct EthereumClient {
         }
     }
 
+    func ethBlockNumber() async throws -> Int {
+        let body = try JSONSerialization.data(withJSONObject: [
+            "jsonrpc": "2.0", "method": "eth_blockNumber", "params": [], "id": 1
+        ] as [String: Any])
+        var req = URLRequest(url: rpcURL)
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.httpBody = body
+        req.timeoutInterval = 15
+        let (data, _) = try await URLSession.shared.data(for: req)
+        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { throw Err.badJSON }
+        if let err = json["error"] as? [String: Any] { throw Err.rpc(err["message"] as? String ?? "unknown") }
+        guard let result = json["result"] as? String else { throw Err.noResult }
+        let hex = result.hasPrefix("0x") ? String(result.dropFirst(2)) : result
+        guard let n = Int(hex, radix: 16) else { throw Err.badJSON }
+        return n
+    }
+
     /// eth_getLogs query. Pass `nil` in `topics` to match any value at that position.
-    func ethGetLogs(address: String, topics: [String?], fromBlock: String) async throws -> [[String: Any]] {
+    func ethGetLogs(address: String, topics: [String?], fromBlock: String, toBlock: String = "latest") async throws -> [[String: Any]] {
         let jsonTopics: [Any] = topics.map { t -> Any in
             guard let t = t else { return NSNull() }
             return t
@@ -29,7 +47,7 @@ struct EthereumClient {
             "params":  [["address":   address,
                          "topics":    jsonTopics,
                          "fromBlock": fromBlock,
-                         "toBlock":   "latest"]],
+                         "toBlock":   toBlock]],
             "id":      1
         ] as [String: Any])
 

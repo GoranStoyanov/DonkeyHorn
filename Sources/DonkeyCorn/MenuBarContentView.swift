@@ -2,17 +2,22 @@ import SwiftUI
 
 struct MenuBarContentView: View {
     @EnvironmentObject var service: UniswapService
-    @Environment(\.openSettings) private var openSettings
+    @State private var showSettings = false
 
     var body: some View {
-        VStack(spacing: 0) {
-            header
-            Divider().opacity(0.4)
-            contentArea
-            Divider().opacity(0.4)
-            footer
+        if showSettings {
+            SettingsView(onDone: { showSettings = false })
+                .environmentObject(service)
+        } else {
+            VStack(spacing: 0) {
+                header
+                Divider().opacity(0.4)
+                contentArea
+                Divider().opacity(0.4)
+                footer
+            }
+            .frame(width: 420)
         }
-        .frame(width: 420)
     }
 
     // MARK: - Header
@@ -43,45 +48,59 @@ struct MenuBarContentView: View {
 
     @ViewBuilder
     private var contentArea: some View {
-        if let err = service.lastError {
-            HStack(alignment: .top, spacing: 8) {
-                Image(systemName: "exclamationmark.triangle.fill")
-                    .foregroundStyle(.orange)
-                    .font(.callout)
-                Text(err)
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                Spacer()
-                Button {
-                    NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString(err, forType: .string)
-                } label: {
-                    Image(systemName: "doc.on.doc")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                .buttonStyle(.plain)
-                .help("Copy error")
-            }
-            .padding(14)
-            .frame(maxWidth: .infinity, alignment: .leading)
-        } else if service.positions.isEmpty {
-            Text(service.isLoading ? "Fetching positions…" : "No active positions found")
-                .font(.callout)
-                .foregroundStyle(.secondary)
+        if service.isLoading {
+            ProgressView()
+                .scaleEffect(0.65)
+                .frame(width: 14, height: 14)
                 .padding(.vertical, 24)
                 .frame(maxWidth: .infinity)
         } else {
-            ScrollView {
-                VStack(spacing: 6) {
-                    ForEach(service.positions) { pos in
-                        PositionCard(pos: pos)
+            VStack(spacing: 0) {
+                if let err = service.lastError {
+                    HStack(alignment: .top, spacing: 8) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundStyle(.orange)
+                            .font(.callout)
+                        Text(err)
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                        Spacer()
+                        Button {
+                            NSPasteboard.general.clearContents()
+                            NSPasteboard.general.setString(err, forType: .string)
+                        } label: {
+                            Image(systemName: "doc.on.doc")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        .buttonStyle(.plain)
+                        .help("Copy error")
                     }
+                    .padding(14)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    if !service.positions.isEmpty { Divider().opacity(0.4) }
                 }
-                .padding(10)
+                if service.positions.isEmpty {
+                    if service.lastError == nil {
+                        Text("No active positions found")
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                            .padding(.vertical, 24)
+                            .frame(maxWidth: .infinity)
+                    }
+                } else {
+                    ScrollView {
+                        VStack(spacing: 6) {
+                            ForEach(service.positions) { pos in
+                                PositionCard(pos: pos)
+                            }
+                        }
+                        .padding(10)
+                    }
+                    .frame(maxHeight: 340)
+                }
             }
-            .frame(maxHeight: 340)
         }
     }
 
@@ -90,8 +109,7 @@ struct MenuBarContentView: View {
     private var footer: some View {
         HStack {
             Button {
-                NSApp.activate(ignoringOtherApps: true)
-                openSettings()
+                showSettings = true
             } label: {
                 Label("Settings", systemImage: "gear")
             }

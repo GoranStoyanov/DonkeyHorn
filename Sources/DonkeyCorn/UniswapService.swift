@@ -89,6 +89,8 @@ final class UniswapService: ObservableObject {
         do {
             let d = try await eth.ethCall(to: v3NFPM, data: ABI.callBalanceOf(owner: wallet))
             numPos = Int(d.readUInt64(wordAt: 0))
+        } catch EthereumClient.Err.noResult {
+            return ([], 0, nil)
         } catch {
             return ([], 0, error.localizedDescription)
         }
@@ -214,6 +216,9 @@ final class UniswapService: ObservableObject {
             let numData = try await eth.ethCall(to: v4PM, data: ABI.callBalanceOf(owner: wallet))
             guard numData.count >= 32 else { return ([], 0, "v4: unexpected balanceOf response") }
             v4Balance = numData.readUInt64(wordAt: 0)
+        } catch EthereumClient.Err.noResult {
+            // v4 PositionManager not deployed on this network — no v4 positions
+            return ([], 0, nil)
         } catch {
             return ([], 0, "v4: balanceOf failed – \(error.localizedDescription)")
         }
@@ -234,11 +239,34 @@ final class UniswapService: ObservableObject {
         // transferSig is hardcoded (known keccak256) to avoid any keccak implementation variance.
         let transferSig = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"
 
+        // Paginate eth_getLogs in 50k-block chunks run in parallel.
+        // Most RPCs silently return [] for ranges > ~10k-50k blocks,
+        // so a single query from the deploy block to "latest" often yields nothing.
+        let currentBlock: Int
+        do { currentBlock = try await eth.ethBlockNumber() }
+        catch { return ([], 0, "v4: eth_blockNumber failed – \(error.localizedDescription)") }
+
+        let deployBlock = Int(v4PMDeployBlock.dropFirst(2), radix: 16)!
+        let chunkSize   = 50_000
+        let chunks = stride(from: deployBlock, through: currentBlock, by: chunkSize).map { start -> (String, String) in
+            let end = min(start + chunkSize - 1, currentBlock)
+            return ("0x" + String(start, radix: 16), "0x" + String(end, radix: 16))
+        }
+
         let toLogs: [[String: Any]]
         do {
-            toLogs = try await eth.ethGetLogs(address: v4PM,
-                                              topics: [transferSig, nil, walletPadded],
-                                              fromBlock: v4PMDeployBlock)
+            toLogs = try await withThrowingTaskGroup(of: [[String: Any]].self) { group in
+                for (from, to) in chunks {
+                    group.addTask {
+                        try await eth.ethGetLogs(address: v4PM,
+                                                 topics: [transferSig, nil, walletPadded],
+                                                 fromBlock: from, toBlock: to)
+                    }
+                }
+                var all: [[String: Any]] = []
+                for try await chunk in group { all.append(contentsOf: chunk) }
+                return all
+            }
         } catch {
             return ([], 0, "v4: Transfer log query failed – \(error.localizedDescription)")
         }
@@ -251,19 +279,7 @@ final class UniswapService: ObservableObject {
         }
         let candidateIds = Set(toLogs.compactMap(extractTokenId))
         guard !candidateIds.isEmpty else {
-            // Diagnostic: query without wallet filter to see if the contract has ANY events.
-            // If anyCount > 0, the wallet topic filter is wrong.
-            // If anyCount == 0, the RPC can't serve logs for this block range.
-            let anyCount = ((try? await eth.ethGetLogs(
-                address: v4PM, topics: [transferSig], fromBlock: v4PMDeployBlock
-            )) ?? []).count
-            return ([], 0, """
-                v4: 0 Transfer-to-wallet events (balance=\(v4Balance))
-                unfiltered Transfer events for contract: \(anyCount)
-                sig: \(transferSig)
-                wallet topic: \(walletPadded)
-                fromBlock: \(v4PMDeployBlock)
-                """)
+            return ([], 0, "v4: no Transfer events found for this wallet (balance=\(v4Balance))")
         }
 
         // Verify current ownership via ownerOf() — handles re-transfers, staking, etc.
@@ -352,6 +368,8 @@ final class UniswapService: ObservableObject {
                     isV4:      true,
                     poolId:    poolId
                 ))
+            } catch EthereumClient.Err.noResult {
+                continue // stale tokenId — contract returned null, position no longer exists
             } catch {
                 rawPositions.append(Position(
                     tokenId: String(tokenId), token0: "", token1: "",

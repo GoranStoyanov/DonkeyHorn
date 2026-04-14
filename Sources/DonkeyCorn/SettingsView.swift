@@ -3,6 +3,7 @@ import SwiftUI
 struct SettingsView: View {
     @ObservedObject private var settings = AppSettings.shared
     @EnvironmentObject  private var service: UniswapService
+    var onDone: (() -> Void)? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
@@ -58,7 +59,10 @@ struct SettingsView: View {
 
             HStack {
                 Spacer()
-                Button("Save & Refresh") { service.refresh() }
+                Button("Save & Refresh") {
+                    service.refresh()
+                    onDone?()
+                }
                     .keyboardShortcut(.return)
                     .buttonStyle(.borderedProminent)
             }
