@@ -41,7 +41,7 @@ struct MenuBarContentView: View {
                 BrandMark()
 
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("DonkeyHorn")
+                    Text("Poolser")
                         .font(.system(size: 13, weight: .semibold))
                     Text("for Uniswap positions")
                         .font(.system(size: 10))
@@ -168,51 +168,25 @@ struct MenuBarContentView: View {
 }
 
 private struct BrandMark: View {
-    private static let logoURL = Bundle.module.url(forResource: "donkeyhorn-logo", withExtension: "png")
-
     var body: some View {
-        if let logo = loadLogoImage() {
-            Image(nsImage: logo)
-                .resizable()
-                .interpolation(.high)
-                .scaledToFit()
-                .frame(width: 26, height: 26)
-                .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 7, style: .continuous)
-                        .stroke(Color.white.opacity(0.28), lineWidth: 0.7)
-                )
-                .shadow(color: Color.black.opacity(0.18), radius: 3, y: 1)
-        } else {
-            ZStack {
-                RoundedRectangle(cornerRadius: 7, style: .continuous)
-                    .fill(
-                        LinearGradient(
-                            colors: [Color(red: 0.96, green: 0.45, blue: 0.16), Color(red: 0.89, green: 0.28, blue: 0.18)],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
+        ZStack {
+            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                .fill(
+                    LinearGradient(
+                        colors: [Color(red: 0.25, green: 0.32, blue: 0.62), Color(red: 0.10, green: 0.14, blue: 0.32)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
                     )
-                Text("DH")
-                    .font(.system(size: 10, weight: .bold, design: .rounded))
-                    .foregroundStyle(.white)
-            }
-            .frame(width: 24, height: 24)
-            .overlay(
-                RoundedRectangle(cornerRadius: 7, style: .continuous)
-                    .stroke(Color.white.opacity(0.35), lineWidth: 0.7)
-            )
-            .shadow(color: Color.orange.opacity(0.25), radius: 3, y: 1)
+                )
+            Text("👀")
+                .font(.system(size: 14))
         }
-    }
-
-    private func loadLogoImage() -> NSImage? {
-#if canImport(AppKit)
-        guard let url = Self.logoURL else { return nil }
-        return NSImage(contentsOf: url)
-#else
-        return nil
-#endif
+        .frame(width: 26, height: 26)
+        .overlay(
+            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                .stroke(Color.white.opacity(0.28), lineWidth: 0.7)
+        )
+        .shadow(color: Color.black.opacity(0.18), radius: 3, y: 1)
     }
 }
 

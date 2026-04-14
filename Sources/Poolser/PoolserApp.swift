@@ -1,7 +1,7 @@
 import SwiftUI
 
 @main
-struct DonkeyHornApp: App {
+struct PoolserApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     @StateObject private var service = UniswapService()
 

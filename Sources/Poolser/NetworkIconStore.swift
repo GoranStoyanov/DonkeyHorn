@@ -20,7 +20,7 @@ final class NetworkIconStore: ObservableObject {
     private init() {
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
             ?? URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
-        let appFolder = base.appendingPathComponent("DonkeyHorn", isDirectory: true)
+        let appFolder = base.appendingPathComponent("Poolser", isDirectory: true)
         iconFolderURL = appFolder.appendingPathComponent("NetworkIcons", isDirectory: true)
         try? FileManager.default.createDirectory(at: iconFolderURL, withIntermediateDirectories: true)
         loadPersistedIcons()

@@ -17,7 +17,7 @@ private let nativeTokenAddress = "0x0000000000000000000000000000000000000000"
 
 @MainActor
 final class UniswapService: ObservableObject {
-    @Published var titleText  = "🦄 …"
+    @Published var titleText  = "👀 …"
     @Published var positions: [Position] = []
     @Published var isLoading  = false
     @Published var lastError: String?
@@ -65,7 +65,7 @@ final class UniswapService: ObservableObject {
         let chains = AppSettings.shared.enabledChains()
         guard !wallet.isEmpty, !key.isEmpty, !chains.isEmpty else {
             guard isCurrentGeneration(generation) else { return }
-            titleText = "🦄 –"
+            titleText = "👀 –"
             lastError = "Configure wallet, Infura API key, and at least one enabled network in Settings (⌘,)"
             return
         }
@@ -97,10 +97,10 @@ final class UniswapService: ObservableObject {
         if let err = lastError { LogStore.shared.log(err, level: .error) }
 
         if all.isEmpty {
-            titleText = "🦄 $0.00"
+            titleText = "👀 $0.00"
         } else {
             let total = results.reduce(0.0) { $0 + $1.feesUSD }
-            titleText = String(format: "🦄 $%.2f", total)
+            titleText = String(format: "👀 $%.2f", total)
         }
 
         LogStore.shared.log("refresh done — \(all.count) positions across \(chains.count) chain(s)", level: .info)

@@ -1,10 +1,6 @@
-# DonkeyHorn
+# 👀 Poolser
 
-<p align="center">
-  <img src="Sources/DonkeyHorn/Resources/donkeyhorn-logo.png" alt="DonkeyHorn logo" width="220" />
-</p>
-
-**DonkeyHorn** — for Uniswap positions.
+**👀 Poolser** — for Uniswap positions.
 
 A macOS menu bar app for monitoring your [Uniswap v3](https://uniswap.org) and [Uniswap v4](https://uniswap.org) liquidity positions. See unclaimed fees in USD at a glance, check whether positions are in range, and open any position directly in the Uniswap app — all without leaving your desktop.
 
@@ -45,8 +41,8 @@ A macOS menu bar app for monitoring your [Uniswap v3](https://uniswap.org) and [
 The project uses Swift Package Manager with no external dependencies.
 
 ```bash
-git clone https://github.com/GoranStoyanov/DonkeyHorn.git
-cd DonkeyHorn
+git clone https://github.com/GoranStoyanov/Poolser.git
+cd Poolser
 swift build -c release
 ```
 
@@ -92,7 +88,7 @@ Settings are saved to `UserDefaults` and persist across launches.
 
 ## RPC Rate Limiting Notes
 
-DonkeyHorn includes built-in pacing to reduce `HTTP 429` rate-limit errors:
+Poolser includes built-in pacing to reduce `HTTP 429` rate-limit errors:
 
 - Credit-aware request limiter (safe margin for constrained plans)
 - Reduced `eth_getLogs` concurrency/chunk pressure
@@ -120,9 +116,9 @@ If your provider still rate-limits frequently:
 
 ## Privacy
 
-DonkeyHorn communicates only with:
+Poolser communicates only with:
 
-- The RPC URL you provide (to read on-chain data)
+- The Infura RPC endpoints derived from your API key (to read on-chain data)
 - [CoinGecko](https://coingecko.com) and [DefiLlama](https://defillama.com) public APIs (to fetch token prices in USD)
 
 No analytics, no tracking, no data leaves your machine beyond those requests.

@@ -2,12 +2,12 @@
 import PackageDescription
 
 let package = Package(
-    name: "DonkeyHorn",
+    name: "Poolser",
     platforms: [.macOS(.v14)],
     targets: [
         .executableTarget(
-            name: "DonkeyHorn",
-            path: "Sources/DonkeyHorn",
+            name: "Poolser",
+            path: "Sources/Poolser",
             resources: [
                 .process("Resources")
             ]
