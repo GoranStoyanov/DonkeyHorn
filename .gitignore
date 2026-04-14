@@ -27,3 +27,17 @@ Pods/
 # Environment / secrets
 .env
 *.pem
+*.p12
+*.mobileprovision
+*.provisionprofile
+ExportOptions.plist
+
+# Xcode code signing / archive intermediates
+*.ipa
+*.xcarchive
+
+# fastlane (if added later)
+fastlane/report.xml
+fastlane/Preview.html
+fastlane/screenshots/
+fastlane/test_output/
