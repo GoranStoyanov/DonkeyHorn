@@ -140,17 +140,19 @@ final class UniswapService: ObservableObject {
             )
         }
 
-        async let v3 = loadV3(wallet: wallet, eth: eth, chain: chain)
+        let v3: (positions: [Position], feesUSD: Double, error: String?) = await {
+            guard chain.supportsV3 else { return ([], 0, nil) }
+            return await loadV3(wallet: wallet, eth: eth, chain: chain)
+        }()
         let v4: (positions: [Position], feesUSD: Double, error: String?) = await {
             guard chain.supportsV4 else { return ([], 0, nil) }
             return await loadV4(wallet: wallet, eth: eth, chain: chain)
         }()
-        let r3 = await v3
 
-        let errors = [r3.error, v4.error].compactMap { $0 }.map { "\(chain.displayName): \($0)" }
+        let errors = [v3.error, v4.error].compactMap { $0 }.map { "\(chain.displayName): \($0)" }
         return ChainLoadResult(
-            positions: r3.positions + v4.positions,
-            feesUSD: r3.feesUSD + v4.feesUSD,
+            positions: v3.positions + v4.positions,
+            feesUSD: v3.feesUSD + v4.feesUSD,
             error: errors.isEmpty ? nil : errors.joined(separator: "\n")
         )
     }
@@ -160,6 +162,9 @@ final class UniswapService: ObservableObject {
     private func loadV3(
         wallet: String, eth: EthereumClient, chain: SupportedChain
     ) async -> (positions: [Position], feesUSD: Double, error: String?) {
+        guard let v3Factory = chain.v3Factory, let v3NFPM = chain.v3NFPM else {
+            return ([], 0, nil)
+        }
 
         var metaCache:      [String: (symbol: String, decimals: Int)] = [:]
         var poolTicks:      [String: Int]    = [:]
@@ -170,7 +175,7 @@ final class UniswapService: ObservableObject {
         // 1 · balance
         let numPos: Int
         do {
-            let d = try await eth.ethCall(to: chain.v3NFPM, data: ABI.callBalanceOf(owner: wallet))
+            let d = try await eth.ethCall(to: v3NFPM, data: ABI.callBalanceOf(owner: wallet))
             numPos = Int(d.readUInt64(wordAt: 0))
         } catch EthereumClient.Err.noResult {
             return ([], 0, "v3: balanceOf returned no result (RPC did not return a usable payload)")
@@ -183,7 +188,7 @@ final class UniswapService: ObservableObject {
         for i in 0..<numPos {
             do {
                 let idData = try await eth.ethCall(
-                    to: chain.v3NFPM,
+                    to: v3NFPM,
                     data: ABI.callTokenOfOwnerByIndex(owner: wallet, index: UInt64(i))
                 )
                 let tokenId = idData.readUInt64(wordAt: 0)
@@ -191,7 +196,7 @@ final class UniswapService: ObservableObject {
                 // positions() returns 12 × 32-byte words:
                 //  0:nonce 1:operator 2:token0 3:token1 4:fee
                 //  5:tickLower 6:tickUpper 7:liquidity 8-9:feeGrowth 10-11:tokensOwed
-                let pos = try await eth.ethCall(to: chain.v3NFPM, data: ABI.callPositions(tokenId: tokenId))
+                let pos = try await eth.ethCall(to: v3NFPM, data: ABI.callPositions(tokenId: tokenId))
                 let token0    = pos.readAddress(wordAt: 64)
                 let token1    = pos.readAddress(wordAt: 96)
                 let feeRaw    = Int(pos.readUInt64(wordAt: 128))
@@ -205,7 +210,7 @@ final class UniswapService: ObservableObject {
 
                 var fees0 = 0.0, fees1 = 0.0
                 if let c = try? await eth.ethCall(
-                    to: chain.v3NFPM,
+                    to: v3NFPM,
                     data: ABI.callCollectStatic(tokenId: tokenId, recipient: wallet)
                 ), c.count >= 64 {
                     fees0 = c.readAmount(wordAt: 0,  decimals: m0.decimals)
@@ -266,7 +271,7 @@ final class UniswapService: ObservableObject {
             if hasUsd { p.usd = usd; totalFeesUSD += usd }
 
             do {
-                let pd   = try await eth.ethCall(to: chain.v3Factory, data: ABI.callGetPool(token0: p.token0, token1: p.token1, fee: p.feeRaw))
+                let pd   = try await eth.ethCall(to: v3Factory, data: ABI.callGetPool(token0: p.token0, token1: p.token1, fee: p.feeRaw))
                 let pool = pd.readAddress(wordAt: 0)
                 guard pool.dropFirst(2).lowercased() != String(repeating: "0", count: 40) else {
                     finalPositions.append(p); continue

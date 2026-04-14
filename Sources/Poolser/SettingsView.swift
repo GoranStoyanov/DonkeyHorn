@@ -68,23 +68,30 @@ struct SettingsView: View {
                                 infoTitle("Enabled Networks", info: "Select which Infura-backed EVM chains to scan.")
                                 ForEach(SupportedChain.all) { chain in
                                     HStack(spacing: 10) {
-                                        Toggle(chain.displayName, isOn: Binding(
+                                        HStack(spacing: 8) {
+                                            ChainIconView(chain: chain, size: 16)
+                                            Text(chain.displayName)
+                                                .font(.system(size: 12))
+                                        }
+                                        Spacer(minLength: 0)
+                                        Toggle("", isOn: Binding(
                                             get: { draftEnabledChainIDs.contains(chain.id) },
                                             set: { enabled in
                                                 if enabled { draftEnabledChainIDs.insert(chain.id) }
                                                 else { draftEnabledChainIDs.remove(chain.id) }
                                             }
                                         ))
-                                .toggleStyle(.switch)
-                                .font(.system(size: 12))
-                                Spacer()
-                                ChainIconView(chain: chain, size: 16)
+                                        .labelsHidden()
+                                        .toggleStyle(.switch)
+                                    }
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                }
                             }
-                        }
-                    }
+                            .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(.horizontal, 14)
                             .padding(.vertical, 10)
                         }
+                        .frame(maxWidth: .infinity, alignment: .leading)
                         .glassCard(cornerRadius: 12)
                     }
 

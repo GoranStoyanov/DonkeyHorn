@@ -51,8 +51,15 @@ final class NetworkIconStore: ObservableObject {
             guard let rows = try JSONSerialization.jsonObject(with: data) as? [[String: Any]] else { return }
             var map: [String: URL] = [:]
             for row in rows {
+                let imageStrFromObject: String? = {
+                    guard let imageObj = row["image"] as? [String: Any] else { return nil }
+                    return (imageObj["small"] as? String)
+                        ?? (imageObj["thumb"] as? String)
+                        ?? (imageObj["large"] as? String)
+                }()
                 guard let id = row["id"] as? String,
                       let imageStr = (row["image"] as? String)
+                        ?? imageStrFromObject
                         ?? (row["image_small"] as? String)
                         ?? (row["image_large"] as? String),
                       let imageURL = URL(string: imageStr) else { continue }
@@ -128,6 +135,28 @@ final class NetworkIconStore: ObservableObject {
             raw = "https://coin-images.coingecko.com/asset_platforms/images/41/large/optimism.png"
         case "polygon-pos":
             raw = "https://coin-images.coingecko.com/asset_platforms/images/15/large/polygon_pos.png"
+        case "blast":
+            raw = "https://coin-images.coingecko.com/asset_platforms/images/192/large/blast.jpeg"
+        case "palm":
+            raw = "https://icons.llamao.fi/icons/chains/rsz_palm.jpg"
+        case "avalanche":
+            raw = "https://coin-images.coingecko.com/asset_platforms/images/12/large/avalanche.png"
+        case "celo":
+            raw = "https://coin-images.coingecko.com/asset_platforms/images/21/large/celo.jpeg"
+        case "linea":
+            raw = "https://coin-images.coingecko.com/asset_platforms/images/135/large/linea.jpeg"
+        case "mantle":
+            raw = "https://coin-images.coingecko.com/asset_platforms/images/140/large/mantle.jpeg"
+        case "zksync":
+            raw = "https://coin-images.coingecko.com/asset_platforms/images/121/large/zksync.jpeg"
+        case "binance-smart-chain":
+            raw = "https://coin-images.coingecko.com/asset_platforms/images/1/large/bnb_smart_chain.png"
+        case "megaeth":
+            raw = "https://coin-images.coingecko.com/asset_platforms/images/32266/large/megaeth.jpg"
+        case "monad":
+            raw = "https://coin-images.coingecko.com/asset_platforms/images/22182/large/monad.png"
+        case "unichain":
+            raw = "https://coin-images.coingecko.com/asset_platforms/images/22206/large/unichain.png"
         default:
             return nil
         }

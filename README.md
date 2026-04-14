@@ -17,7 +17,14 @@ A macOS menu bar app for monitoring your [Uniswap v3](https://uniswap.org) and [
   - Arbitrum
   - Optimism
   - Polygon
-- Uniswap v4 position loading + fee calculation on Ethereum mainnet
+- Uniswap v4 position loading + fee calculation on:
+  - Ethereum
+  - Base
+  - Arbitrum
+  - Optimism
+  - Polygon
+  - Blast
+  - Unichain
 - Per-position breakdown: token pair, fee tier, in/out-of-range status, position value, unclaimed fees
 - Tick range visualization with:
   - in/out-of-range styling
@@ -82,6 +89,7 @@ Important behavior:
 - Setting edits are draft-only until you press **Save & Refresh**
 - Closing settings with `X`/`Esc` discards unsaved changes
 - Saved settings are persisted in `UserDefaults`
+- Some Infura networks are gated per project; enable the network in your Infura dashboard first if needed
 
 ## How Position Discovery Works
 
@@ -91,7 +99,6 @@ Important behavior:
 - Loads per-position details via `positions(tokenId)`
 
 ### v4
-- Currently active on Ethereum mainnet in this codebase (other chains are configured but gated by deployment-block support)
 - Uses `balanceOf(owner)` on the v4 `PositionManager`
 - Reconstructs ownership from `Transfer` logs (v4 PM is not ERC-721 Enumerable)
 - Persists a local ownership cache in `UserDefaults`:
@@ -129,7 +136,8 @@ If your provider still rate-limits frequently:
   - Usually provider instability. The app retries automatically, but a more reliable endpoint helps.
 
 - A network you enabled disappears from selection after refresh
-  - Your Infura project likely has no access to that network; Poolser auto-disables networks that return access-denied responses.
+  - Your Infura project likely has no access to that network yet. Enable it in the Infura dashboard for your API key, then re-enable it in Settings.
+  - Poolser auto-disables networks that return Infura access-denied responses.
 
 ## Privacy
 
