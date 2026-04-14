@@ -1,7 +1,10 @@
 import Foundation
 
 struct Position: Identifiable {
-    var id: String { tokenId }
+    var id: String { "\(chainID)-\(tokenId)" }
+    let chainID: String
+    let chainName: String
+    let chainNumericID: Int
     let tokenId: String
     let token0: String
     let token1: String
@@ -54,6 +57,7 @@ struct Position: Identifiable {
     }
 
     var versionLabel: String { isV4 ? "v4" : "v3" }
+    var chainLabel: String { chainName }
 
     /// Total position liquidity value in USD, formatted.
     var positionUSDLabel: String? {

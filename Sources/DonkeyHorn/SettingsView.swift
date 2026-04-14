@@ -4,9 +4,32 @@ struct SettingsView: View {
     @ObservedObject private var settings = AppSettings.shared
     @EnvironmentObject  private var service: UniswapService
     var onDismiss: (() -> Void)? = nil
+    @State private var draftWalletAddress: String
+    @State private var draftInfuraAPIKey: String
+    @State private var draftEnabledChainIDs: Set<String>
+    @State private var draftRefreshIntervalMinutes: Int
+    @State private var draftRPCCreditsPerSecondBudget: Int
+    @State private var draftV4LogChunkSize: Int
+    @State private var draftV4LogMaxConcurrentRequests: Int
+    @State private var draftV4BootstrapMaxChunksPerRefresh: Int
+    @State private var draftLaunchAtLogin: Bool
+
+    init(onDismiss: (() -> Void)? = nil) {
+        self.onDismiss = onDismiss
+        let s = AppSettings.shared
+        _draftWalletAddress = State(initialValue: s.walletAddress)
+        _draftInfuraAPIKey = State(initialValue: s.infuraAPIKey)
+        _draftEnabledChainIDs = State(initialValue: s.enabledChainIDs)
+        _draftRefreshIntervalMinutes = State(initialValue: s.refreshIntervalMinutes)
+        _draftRPCCreditsPerSecondBudget = State(initialValue: s.rpcCreditsPerSecondBudget)
+        _draftV4LogChunkSize = State(initialValue: s.v4LogChunkSize)
+        _draftV4LogMaxConcurrentRequests = State(initialValue: s.v4LogMaxConcurrentRequests)
+        _draftV4BootstrapMaxChunksPerRefresh = State(initialValue: s.v4BootstrapMaxChunksPerRefresh)
+        _draftLaunchAtLogin = State(initialValue: s.launchAtLogin)
+    }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 20) {
+        VStack(alignment: .leading, spacing: 12) {
             HStack {
                 Text("Settings")
                     .font(.system(size: 15, weight: .semibold))
@@ -23,132 +46,176 @@ struct SettingsView: View {
                 .keyboardShortcut(.escape, modifiers: [])
             }
 
-            settingsSection("Ethereum Configuration") {
-                VStack(spacing: 0) {
-                    fieldRow(
-                        label: "Wallet Address",
-                        info: "Address to inspect for v3/v4 NFT liquidity positions.",
-                        placeholder: "0x…",
-                        text: $settings.walletAddress
-                    )
-                    Divider().opacity(0.35).padding(.leading, 14)
-                    fieldRow(
-                        label: "RPC URL",
-                        info: "HTTPS JSON-RPC endpoint used for all on-chain reads.",
-                        placeholder: "https://mainnet.infura.io/v3/…",
-                        text: $settings.rpcURL
-                    )
-                }
-                .glassCard(cornerRadius: 12)
-            }
-
-            settingsSection("Performance & RPC") {
-                VStack(spacing: 0) {
-                    settingRow(
-                        label: "Refresh Interval",
-                        info: "Automatic refresh cadence in minutes."
-                    ) {
-                        Stepper(value: $settings.refreshIntervalMinutes, in: 1...120) {
-                            Text("\(settings.refreshIntervalMinutes) min")
-                                .font(.system(size: 12, design: .monospaced))
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) {
+                    settingsSection("Infura Configuration") {
+                        VStack(spacing: 0) {
+                            fieldRow(
+                                label: "Wallet Address",
+                                info: "Address to inspect for Uniswap v3/v4 NFT liquidity positions.",
+                                placeholder: "0x…",
+                                text: $draftWalletAddress
+                            )
+                            Divider().opacity(0.35).padding(.leading, 14)
+                            fieldRow(
+                                label: "Infura API Key",
+                                info: "Only the API key is needed. RPC URLs are generated per enabled chain.",
+                                placeholder: "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+                                text: $draftInfuraAPIKey
+                            )
+                            Divider().opacity(0.35).padding(.leading, 14)
+                            VStack(alignment: .leading, spacing: 8) {
+                                infoTitle("Enabled Networks", info: "Select which Infura-backed EVM chains to scan.")
+                                ForEach(SupportedChain.all) { chain in
+                                    HStack(spacing: 10) {
+                                        Toggle(chain.displayName, isOn: Binding(
+                                            get: { draftEnabledChainIDs.contains(chain.id) },
+                                            set: { enabled in
+                                                if enabled { draftEnabledChainIDs.insert(chain.id) }
+                                                else { draftEnabledChainIDs.remove(chain.id) }
+                                            }
+                                        ))
+                                .toggleStyle(.switch)
+                                .font(.system(size: 12))
+                                Spacer()
+                                ChainIconView(chain: chain, size: 16)
+                            }
                         }
-                        .frame(width: 140, alignment: .trailing)
                     }
-                    Divider().opacity(0.35).padding(.leading, 14)
-                    settingRow(
-                        label: "RPC Credit Budget",
-                        info: "Max client-side request pacing budget (credits per second)."
-                    ) {
-                        Stepper(value: $settings.rpcCreditsPerSecondBudget, in: 50...5_000, step: 25) {
-                            Text("\(settings.rpcCreditsPerSecondBudget) cps")
-                                .font(.system(size: 12, design: .monospaced))
-                        }
-                        .frame(width: 140, alignment: .trailing)
-                    }
-                    Divider().opacity(0.35).padding(.leading, 14)
-                    settingRow(
-                        label: "v4 Log Chunk Size",
-                        info: "Blocks per eth_getLogs request during v4 ownership discovery."
-                    ) {
-                        Stepper(value: $settings.v4LogChunkSize, in: 1_000...50_000, step: 1_000) {
-                            Text("\(settings.v4LogChunkSize)")
-                                .font(.system(size: 12, design: .monospaced))
-                        }
-                        .frame(width: 140, alignment: .trailing)
-                    }
-                    Divider().opacity(0.35).padding(.leading, 14)
-                    settingRow(
-                        label: "v4 Log Concurrency",
-                        info: "Parallel eth_getLogs requests during v4 scanning."
-                    ) {
-                        Stepper(value: $settings.v4LogMaxConcurrentRequests, in: 1...8) {
-                            Text("\(settings.v4LogMaxConcurrentRequests)")
-                                .font(.system(size: 12, design: .monospaced))
-                        }
-                        .frame(width: 140, alignment: .trailing)
-                    }
-                    Divider().opacity(0.35).padding(.leading, 14)
-                    settingRow(
-                        label: "Bootstrap Chunks / Refresh",
-                        info: "Max v4 history chunks scanned in one refresh cycle."
-                    ) {
-                        Stepper(value: $settings.v4BootstrapMaxChunksPerRefresh, in: 5...200, step: 5) {
-                            Text("\(settings.v4BootstrapMaxChunksPerRefresh)")
-                                .font(.system(size: 12, design: .monospaced))
-                        }
-                        .frame(width: 140, alignment: .trailing)
-                    }
-                    Divider().opacity(0.35).padding(.leading, 14)
-                    HStack {
-                        Spacer()
-                        Button("Reset Performance Defaults") {
-                            settings.resetPerformanceDefaults()
-                        }
-                        .buttonStyle(.borderless)
-                        .font(.caption)
-                    }
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 10)
-                }
-                .glassCard(cornerRadius: 12)
-            }
-
-            settingsSection("General") {
-                VStack(spacing: 0) {
-                    HStack {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Launch at Login")
-                                .font(.system(size: 13))
-                            Text("Open automatically when you log in")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                        Spacer()
-                        Toggle("", isOn: Binding(
-                            get: { settings.launchAtLogin },
-                            set: { newValue in Task { await settings.setLaunchAtLogin(newValue) } }
-                        ))
-                        .labelsHidden()
-                    }
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 12)
-
-                    if let err = settings.loginItemError {
-                        Divider().opacity(0.35).padding(.leading, 14)
-                        Label(err, systemImage: "exclamationmark.triangle.fill")
-                            .font(.caption)
-                            .foregroundStyle(.red)
                             .padding(.horizontal, 14)
-                            .padding(.vertical, 8)
-                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.vertical, 10)
+                        }
+                        .glassCard(cornerRadius: 12)
+                    }
+
+                    settingsSection("Performance & RPC") {
+                        VStack(spacing: 0) {
+                            settingRow(
+                                label: "Refresh Interval",
+                                info: "Automatic refresh cadence in minutes."
+                            ) {
+                                Stepper(value: $draftRefreshIntervalMinutes, in: 1...120) {
+                                    Text("\(draftRefreshIntervalMinutes) min")
+                                        .font(.system(size: 12, design: .monospaced))
+                                }
+                                .frame(width: 140, alignment: .trailing)
+                            }
+                            Divider().opacity(0.35).padding(.leading, 14)
+                            settingRow(
+                                label: "RPC Credit Budget",
+                                info: "Max client-side request pacing budget (credits per second)."
+                            ) {
+                                Stepper(value: $draftRPCCreditsPerSecondBudget, in: 50...5_000, step: 25) {
+                                    Text("\(draftRPCCreditsPerSecondBudget) cps")
+                                        .font(.system(size: 12, design: .monospaced))
+                                }
+                                .frame(width: 140, alignment: .trailing)
+                            }
+                            Divider().opacity(0.35).padding(.leading, 14)
+                            settingRow(
+                                label: "v4 Log Chunk Size",
+                                info: "Blocks per eth_getLogs request during v4 ownership discovery."
+                            ) {
+                                Stepper(value: $draftV4LogChunkSize, in: 1_000...50_000, step: 1_000) {
+                                    Text("\(draftV4LogChunkSize)")
+                                        .font(.system(size: 12, design: .monospaced))
+                                }
+                                .frame(width: 140, alignment: .trailing)
+                            }
+                            Divider().opacity(0.35).padding(.leading, 14)
+                            settingRow(
+                                label: "v4 Log Concurrency",
+                                info: "Parallel eth_getLogs requests during v4 scanning."
+                            ) {
+                                Stepper(value: $draftV4LogMaxConcurrentRequests, in: 1...8) {
+                                    Text("\(draftV4LogMaxConcurrentRequests)")
+                                        .font(.system(size: 12, design: .monospaced))
+                                }
+                                .frame(width: 140, alignment: .trailing)
+                            }
+                            Divider().opacity(0.35).padding(.leading, 14)
+                            settingRow(
+                                label: "Bootstrap Chunks / Refresh",
+                                info: "Max v4 history chunks scanned in one refresh cycle."
+                            ) {
+                                Stepper(value: $draftV4BootstrapMaxChunksPerRefresh, in: 5...200, step: 5) {
+                                    Text("\(draftV4BootstrapMaxChunksPerRefresh)")
+                                        .font(.system(size: 12, design: .monospaced))
+                                }
+                                .frame(width: 140, alignment: .trailing)
+                            }
+                            Divider().opacity(0.35).padding(.leading, 14)
+                            HStack {
+                                Spacer()
+                                Button("Reset Performance Defaults") {
+                                    draftRefreshIntervalMinutes = 10
+                                    draftRPCCreditsPerSecondBudget = 400
+                                    draftV4LogChunkSize = 12_000
+                                    draftV4LogMaxConcurrentRequests = 2
+                                    draftV4BootstrapMaxChunksPerRefresh = 80
+                                }
+                                .buttonStyle(.borderless)
+                                .font(.caption)
+                            }
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 10)
+                        }
+                        .glassCard(cornerRadius: 12)
+                    }
+
+                    settingsSection("General") {
+                        VStack(spacing: 0) {
+                            HStack {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("Launch at Login")
+                                        .font(.system(size: 13))
+                                    Text("Open automatically when you log in")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                                Spacer()
+                                Toggle("", isOn: Binding(
+                                    get: { draftLaunchAtLogin },
+                                    set: { draftLaunchAtLogin = $0 }
+                                ))
+                                .labelsHidden()
+                            }
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 12)
+
+                            if let err = settings.loginItemError {
+                                Divider().opacity(0.35).padding(.leading, 14)
+                                Label(err, systemImage: "exclamationmark.triangle.fill")
+                                    .font(.caption)
+                                    .foregroundStyle(.red)
+                                    .padding(.horizontal, 14)
+                                    .padding(.vertical, 8)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                            }
+                        }
+                        .glassCard(cornerRadius: 12)
                     }
                 }
-                .glassCard(cornerRadius: 12)
+                .padding(.vertical, 2)
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+            Divider().opacity(0.35)
 
             HStack {
                 Spacer()
                 Button("Save & Refresh") {
+                    settings.walletAddress = draftWalletAddress
+                    settings.infuraAPIKey = draftInfuraAPIKey
+                    settings.enabledChainIDs = draftEnabledChainIDs
+                    settings.refreshIntervalMinutes = draftRefreshIntervalMinutes
+                    settings.rpcCreditsPerSecondBudget = draftRPCCreditsPerSecondBudget
+                    settings.v4LogChunkSize = draftV4LogChunkSize
+                    settings.v4LogMaxConcurrentRequests = draftV4LogMaxConcurrentRequests
+                    settings.v4BootstrapMaxChunksPerRefresh = draftV4BootstrapMaxChunksPerRefresh
+                    if settings.launchAtLogin != draftLaunchAtLogin {
+                        Task { await settings.setLaunchAtLogin(draftLaunchAtLogin) }
+                    }
                     service.refresh()
                     onDismiss?()
                 }
@@ -157,7 +224,7 @@ struct SettingsView: View {
             }
         }
         .padding(20)
-        .frame(width: 460)
+        .frame(width: 460, height: 640)
     }
 
     @ViewBuilder

@@ -12,9 +12,11 @@ struct EthereumClient {
     private let costEthCall = 80
     private let costEthGetLogs = 255
     private let costEthBlockNumber = 80
+    private let costEthChainId = 80
     private let callMaxRetries = 3
     private let logsMaxRetries = 4
     private let blockNumberMaxRetries = 2
+    private let chainIdMaxRetries = 2
 
     enum Err: Error, LocalizedError {
         case rpc(String)
@@ -69,6 +71,51 @@ struct EthereumClient {
                 guard shouldRetry(error), attempt < blockNumberMaxRetries else { throw error }
                 let next = attempt + 1
                 log("eth_blockNumber retry \(next)/\(blockNumberMaxRetries)", level: .info)
+                try await sleepBeforeRetry(attempt: attempt, error: error)
+            }
+        }
+        throw lastError ?? Err.rpc("unknown")
+    }
+
+    func ethChainId() async throws -> Int {
+        var lastError: Error?
+        for attempt in 0...chainIdMaxRetries {
+            do {
+                await configureLimiterFromSettings()
+                await Self.limiter.acquire(credits: costEthChainId)
+                let body = try JSONSerialization.data(withJSONObject: [
+                    "jsonrpc": "2.0", "method": "eth_chainId", "params": [], "id": 1
+                ] as [String: Any])
+                var req = URLRequest(url: rpcURL)
+                req.httpMethod = "POST"
+                req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+                req.httpBody = body
+                req.timeoutInterval = 15
+
+                let (data, response) = try await URLSession.shared.data(for: req)
+                if let http = response as? HTTPURLResponse, !(200...299).contains(http.statusCode) {
+                    throw Err.rpc("HTTP \(http.statusCode)")
+                }
+
+                guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+                    log("eth_chainId ← bad JSON (\(debugBody(data)))", level: .error)
+                    throw Err.badJSON
+                }
+                if let err = json["error"] as? [String: Any] {
+                    throw Err.rpc(err["message"] as? String ?? "unknown")
+                }
+                guard let result = json["result"] as? String else {
+                    log("eth_chainId ← no result", level: .error)
+                    throw Err.noResult
+                }
+                let hex = result.hasPrefix("0x") ? String(result.dropFirst(2)) : result
+                guard let n = Int(hex, radix: 16) else { throw Err.badJSON }
+                return n
+            } catch {
+                lastError = error
+                guard shouldRetry(error), attempt < chainIdMaxRetries else { throw error }
+                let next = attempt + 1
+                log("eth_chainId retry \(next)/\(chainIdMaxRetries)", level: .info)
                 try await sleepBeforeRetry(attempt: attempt, error: error)
             }
         }

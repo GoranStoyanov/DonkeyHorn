@@ -15,7 +15,8 @@ A macOS menu bar app for monitoring your [Uniswap v3](https://uniswap.org) and [
 ## Features
 
 - Live unclaimed fee totals in the menu bar (auto-refresh every 10 minutes + manual refresh)
-- Supports both **Uniswap v3** and **Uniswap v4** positions on Ethereum mainnet
+- Multi-chain support for Uniswap v3 on Infura-backed EVM networks (Ethereum, Base, Arbitrum, Optimism, Polygon)
+- Supports **Uniswap v4** positions on Ethereum mainnet
 - Per-position breakdown: token pair, fee tier, in/out-of-range status, position value, unclaimed fees
 - Tick range visualization with:
   - in/out-of-range styling
@@ -28,7 +29,7 @@ A macOS menu bar app for monitoring your [Uniswap v3](https://uniswap.org) and [
 - Incremental v4 ownership discovery:
   - bootstrap scan is chunked and resumable
   - ownership cache avoids rescanning full history every refresh
-- Reads data directly from Ethereum via your own RPC — no third-party indexer or API key required
+- Reads data directly from chain RPC (Infura-hosted endpoints generated from your API key), with no third-party indexer
 - Click any position to open it on app.uniswap.org
 - Launch at Login support (toggle in Settings)
 - Native macOS app — no Electron, no web view
@@ -36,7 +37,7 @@ A macOS menu bar app for monitoring your [Uniswap v3](https://uniswap.org) and [
 ## Requirements
 
 - macOS 14 (Sonoma) or later
-- An Ethereum RPC URL (e.g. [Infura](https://infura.io), [Alchemy](https://alchemy.com), or your own node)
+- An [Infura](https://infura.io) API key
 - A wallet address that holds Uniswap v3 or v4 positions
 
 ## Building
@@ -68,7 +69,8 @@ On first launch, open **Settings** (gear icon in the popup, or `⌘,`) and enter
 | Field | Description |
 |---|---|
 | Wallet Address | Your Ethereum address (`0x…`) |
-| RPC URL | Any Ethereum JSON-RPC endpoint |
+| Infura API Key | The API key only (no full URL needed) |
+| Enabled Networks | Toggle supported Infura networks on/off |
 
 Settings are saved to `UserDefaults` and persist across launches.
 

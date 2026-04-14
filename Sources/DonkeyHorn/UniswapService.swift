@@ -1,14 +1,6 @@
 import Foundation
 import Combine
 
-// MARK: - Contract addresses
-
-private let v3NFPM    = "0xC36442b4a4522E871399CD717aBDD847Ab11FE88"
-private let v3Factory = "0x1F98431c8aD98523631AE4a59f267346ea31F984"
-private let v4PM           = "0xbD216513d74C8cf14cf4747E6AaA6420FF64ee9E"
-private let v4SV           = "0x7fFE42C4a5DEeA5b0feC41C94C136Cf115597227"
-/// First block to scan for v4 Transfer events (~Jan 2025, before v4 mainnet launch).
-private let v4PMDeployBlock = "0x14A0000"
 private let v4ReorgLookbackBlocks = 24
 
 private struct V4OwnershipCache: Codable {
@@ -18,10 +10,8 @@ private struct V4OwnershipCache: Codable {
     let nextBootstrapFromBlock: Int?
 }
 
-/// Native ETH in Uniswap v4 is represented as address(0).
-/// We substitute WETH for price lookups since CoinGecko/DefiLlama index by token address.
-private let nativeETHAddress = "0x0000000000000000000000000000000000000000"
-private let wethAddress      = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
+/// Native token in Uniswap v4 is represented as address(0).
+private let nativeTokenAddress = "0x0000000000000000000000000000000000000000"
 
 // MARK: - Service
 
@@ -35,6 +25,12 @@ final class UniswapService: ObservableObject {
     private let priceService = PriceService()
     private var timer: Timer?
     private var refreshIntervalCancellable: AnyCancellable?
+
+    private struct ChainLoadResult {
+        let positions: [Position]
+        let feesUSD: Double
+        let error: String?
+    }
 
     init() {
         configureTimer()
@@ -50,10 +46,11 @@ final class UniswapService: ObservableObject {
 
     private func load() async {
         let wallet = AppSettings.shared.walletAddress
-        let rpcStr = AppSettings.shared.rpcURL
-        guard !wallet.isEmpty, !rpcStr.isEmpty, let rpcURL = URL(string: rpcStr) else {
+        let key = AppSettings.shared.infuraAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        let chains = AppSettings.shared.enabledChains()
+        guard !wallet.isEmpty, !key.isEmpty, !chains.isEmpty else {
             titleText = "🦄 –"
-            lastError = "Configure wallet address and RPC URL in Settings (⌘,)"
+            lastError = "Configure wallet, Infura API key, and at least one enabled network in Settings (⌘,)"
             return
         }
 
@@ -61,34 +58,89 @@ final class UniswapService: ObservableObject {
         lastError = nil
         LogStore.shared.log("refresh started", level: .info)
 
-        let eth = EthereumClient(rpcURL: rpcURL)
+        let results = await withTaskGroup(of: ChainLoadResult.self, returning: [ChainLoadResult].self) { group in
+            for chain in chains {
+                group.addTask { [wallet] in
+                    await self.loadChain(wallet: wallet, chain: chain)
+                }
+            }
+            var collected: [ChainLoadResult] = []
+            for await result in group { collected.append(result) }
+            return collected
+        }
 
-        // Run v3 and v4 concurrently — they interleave at each network await.
-        async let v3 = loadV3(wallet: wallet, eth: eth)
-        async let v4 = loadV4(wallet: wallet, eth: eth)
-        let (r3, r4) = await (v3, v4)
+        let all = results.flatMap(\.positions)
+        positions = all.sorted { lhs, rhs in
+            (lhs.positionUSD ?? lhs.usd ?? 0) > (rhs.positionUSD ?? rhs.usd ?? 0)
+        }
 
-        let all = r3.positions + r4.positions
-        positions = all
-
-        let errors = [r3.error, r4.error].compactMap { $0 }
+        let errors = results.compactMap(\.error)
         lastError = errors.isEmpty ? nil : errors.joined(separator: "\n")
         if let err = lastError { LogStore.shared.log(err, level: .error) }
 
         if all.isEmpty {
             titleText = "🦄 $0.00"
         } else {
-            titleText = String(format: "🦄 $%.2f", r3.feesUSD + r4.feesUSD)
+            let total = results.reduce(0.0) { $0 + $1.feesUSD }
+            titleText = String(format: "🦄 $%.2f", total)
         }
 
-        LogStore.shared.log("refresh done — v3: \(r3.positions.count) positions, v4: \(r4.positions.count) positions", level: .info)
+        LogStore.shared.log("refresh done — \(all.count) positions across \(chains.count) chain(s)", level: .info)
         isLoading = false
+    }
+
+    private func loadChain(wallet: String, chain: SupportedChain) async -> ChainLoadResult {
+        guard let rpcURL = AppSettings.shared.infuraRPCURL(for: chain) else {
+            return ChainLoadResult(positions: [], feesUSD: 0, error: "\(chain.displayName): invalid Infura API key")
+        }
+        let eth = EthereumClient(rpcURL: rpcURL)
+
+        do {
+            let probedChainID = try await eth.ethChainId()
+            if probedChainID != chain.chainId {
+                return ChainLoadResult(
+                    positions: [],
+                    feesUSD: 0,
+                    error: "\(chain.displayName): RPC chain mismatch (expected \(chain.chainId), got \(probedChainID))"
+                )
+            }
+        } catch {
+            let msg = error.localizedDescription
+            if msg.lowercased().contains("does not have access") ||
+                msg.lowercased().contains("not available for project") {
+                AppSettings.shared.disableChain(chain.id)
+                return ChainLoadResult(
+                    positions: [],
+                    feesUSD: 0,
+                    error: "\(chain.displayName): Infura access denied for this API key (network auto-disabled)"
+                )
+            }
+            return ChainLoadResult(
+                positions: [],
+                feesUSD: 0,
+                error: "\(chain.displayName): RPC unavailable – \(msg)"
+            )
+        }
+
+        async let v3 = loadV3(wallet: wallet, eth: eth, chain: chain)
+        let v4: (positions: [Position], feesUSD: Double, error: String?) = await {
+            guard chain.supportsV4 else { return ([], 0, nil) }
+            return await loadV4(wallet: wallet, eth: eth, chain: chain)
+        }()
+        let r3 = await v3
+
+        let errors = [r3.error, v4.error].compactMap { $0 }.map { "\(chain.displayName): \($0)" }
+        return ChainLoadResult(
+            positions: r3.positions + v4.positions,
+            feesUSD: r3.feesUSD + v4.feesUSD,
+            error: errors.isEmpty ? nil : errors.joined(separator: "\n")
+        )
     }
 
     // MARK: - v3
 
     private func loadV3(
-        wallet: String, eth: EthereumClient
+        wallet: String, eth: EthereumClient, chain: SupportedChain
     ) async -> (positions: [Position], feesUSD: Double, error: String?) {
 
         var metaCache:      [String: (symbol: String, decimals: Int)] = [:]
@@ -100,7 +152,7 @@ final class UniswapService: ObservableObject {
         // 1 · balance
         let numPos: Int
         do {
-            let d = try await eth.ethCall(to: v3NFPM, data: ABI.callBalanceOf(owner: wallet))
+            let d = try await eth.ethCall(to: chain.v3NFPM, data: ABI.callBalanceOf(owner: wallet))
             numPos = Int(d.readUInt64(wordAt: 0))
         } catch EthereumClient.Err.noResult {
             return ([], 0, "v3: balanceOf returned no result (RPC did not return a usable payload)")
@@ -113,7 +165,7 @@ final class UniswapService: ObservableObject {
         for i in 0..<numPos {
             do {
                 let idData = try await eth.ethCall(
-                    to: v3NFPM,
+                    to: chain.v3NFPM,
                     data: ABI.callTokenOfOwnerByIndex(owner: wallet, index: UInt64(i))
                 )
                 let tokenId = idData.readUInt64(wordAt: 0)
@@ -121,7 +173,7 @@ final class UniswapService: ObservableObject {
                 // positions() returns 12 × 32-byte words:
                 //  0:nonce 1:operator 2:token0 3:token1 4:fee
                 //  5:tickLower 6:tickUpper 7:liquidity 8-9:feeGrowth 10-11:tokensOwed
-                let pos = try await eth.ethCall(to: v3NFPM, data: ABI.callPositions(tokenId: tokenId))
+                let pos = try await eth.ethCall(to: chain.v3NFPM, data: ABI.callPositions(tokenId: tokenId))
                 let token0    = pos.readAddress(wordAt: 64)
                 let token1    = pos.readAddress(wordAt: 96)
                 let feeRaw    = Int(pos.readUInt64(wordAt: 128))
@@ -135,7 +187,7 @@ final class UniswapService: ObservableObject {
 
                 var fees0 = 0.0, fees1 = 0.0
                 if let c = try? await eth.ethCall(
-                    to: v3NFPM,
+                    to: chain.v3NFPM,
                     data: ABI.callCollectStatic(tokenId: tokenId, recipient: wallet)
                 ), c.count >= 64 {
                     fees0 = c.readAmount(wordAt: 0,  decimals: m0.decimals)
@@ -148,6 +200,9 @@ final class UniswapService: ObservableObject {
                 tokenAddrs.insert(token1.lowercased())
 
                 rawPositions.append(Position(
+                    chainID: chain.id,
+                    chainName: chain.displayName,
+                    chainNumericID: chain.chainId,
                     tokenId:   String(tokenId),
                     token0:    token0,    token1:    token1,
                     sym0:      m0.symbol, sym1:      m1.symbol,
@@ -159,6 +214,9 @@ final class UniswapService: ObservableObject {
                 ))
             } catch {
                 rawPositions.append(Position(
+                    chainID: chain.id,
+                    chainName: chain.displayName,
+                    chainNumericID: chain.chainId,
                     tokenId: "err-\(i)", token0: "", token1: "",
                     sym0: "", sym1: "", feePct: "", feeRaw: 0,
                     fees0: 0, fees1: 0, tickLower: 0, tickUpper: 0,
@@ -171,7 +229,11 @@ final class UniswapService: ObservableObject {
         guard !rawPositions.isEmpty else { return ([], 0, nil) }
 
         // 3 · prices
-        let priceMap = await priceService.fetchPrices(for: Array(tokenAddrs))
+        let priceMap = await priceService.fetchPrices(
+            for: Array(tokenAddrs),
+            coingeckoPlatformID: chain.coingeckoPlatformID,
+            defiLlamaChainKey: chain.defiLlamaChainKey
+        )
 
         // 4 · USD + in-range + amounts
         var totalFeesUSD = 0.0
@@ -186,7 +248,7 @@ final class UniswapService: ObservableObject {
             if hasUsd { p.usd = usd; totalFeesUSD += usd }
 
             do {
-                let pd   = try await eth.ethCall(to: v3Factory, data: ABI.callGetPool(token0: p.token0, token1: p.token1, fee: p.feeRaw))
+                let pd   = try await eth.ethCall(to: chain.v3Factory, data: ABI.callGetPool(token0: p.token0, token1: p.token1, fee: p.feeRaw))
                 let pool = pd.readAddress(wordAt: 0)
                 guard pool.dropFirst(2).lowercased() != String(repeating: "0", count: 40) else {
                     finalPositions.append(p); continue
@@ -215,8 +277,15 @@ final class UniswapService: ObservableObject {
     // MARK: - v4
 
     private func loadV4(
-        wallet: String, eth: EthereumClient
+        wallet: String, eth: EthereumClient, chain: SupportedChain
     ) async -> (positions: [Position], feesUSD: Double, error: String?) {
+        guard let v4PM = chain.v4PM, let v4SV = chain.v4SV else {
+            return ([], 0, nil)
+        }
+        guard let deployHex = chain.v4DeployBlockHex,
+              let deployBlock = Int(deployHex.dropFirst(2), radix: 16) else {
+            return ([], 0, nil)
+        }
 
         var metaCache: [String: (symbol: String, decimals: Int)] = [:]
         var poolCache: [String: (sqrtPrice: Double, tick: Int)] = [:]
@@ -257,8 +326,7 @@ final class UniswapService: ObservableObject {
         do { currentBlock = try await eth.ethBlockNumber() }
         catch { return ([], 0, "v4: eth_blockNumber failed – \(error.localizedDescription)") }
 
-        let deployBlock = Int(v4PMDeployBlock.dropFirst(2), radix: 16)!
-        let previousCache = loadV4OwnershipCache(wallet: wallet)
+        let previousCache = loadV4OwnershipCache(wallet: wallet, chain: chain)
         let hasCache = previousCache != nil
         let chunkSize = AppSettings.shared.v4LogChunkSize
         let maxConcurrentLogs = AppSettings.shared.v4LogMaxConcurrentRequests
@@ -357,7 +425,8 @@ final class UniswapService: ObservableObject {
                     ownedTokenIds: [],
                     nextBootstrapFromBlock: nextBootstrapFromBlock
                 ),
-                wallet: wallet
+                wallet: wallet,
+                chain: chain
             )
             if let next = nextBootstrapFromBlock {
                 return ([], 0, "v4: bootstrap scan in progress (next from 0x\(String(next, radix: 16)))")
@@ -421,7 +490,8 @@ final class UniswapService: ObservableObject {
                 ownedTokenIds: Array(ownedIds).sorted(),
                 nextBootstrapFromBlock: nextBootstrapFromBlock
             ),
-            wallet: wallet
+            wallet: wallet,
+            chain: chain
         )
 
         // 3 · per-position
@@ -457,13 +527,13 @@ final class UniswapService: ObservableObject {
                 guard liquidity > 0 else { continue }
 
                 // Map native ETH → WETH for metadata/price lookups; keep original for PoolId
-                let priceAddr0 = isNativeETH(currency0) ? wethAddress : currency0
-                let priceAddr1 = isNativeETH(currency1) ? wethAddress : currency1
+                let priceAddr0 = isNativeToken(currency0) ? chain.wrappedNativeToken : currency0
+                let priceAddr1 = isNativeToken(currency1) ? chain.wrappedNativeToken : currency1
 
-                let m0 = isNativeETH(currency0)
+                let m0 = isNativeToken(currency0)
                     ? (symbol: "ETH", decimals: 18)
                     : await resolve(addr: currency0, eth: eth, cache: &metaCache)
-                let m1 = isNativeETH(currency1)
+                let m1 = isNativeToken(currency1)
                     ? (symbol: "ETH", decimals: 18)
                     : await resolve(addr: currency1, eth: eth, cache: &metaCache)
 
@@ -480,6 +550,9 @@ final class UniswapService: ObservableObject {
                     : String(format: "%.4g", Double(fee) / 10_000)
 
                 rawPositions.append(Position(
+                    chainID: chain.id,
+                    chainName: chain.displayName,
+                    chainNumericID: chain.chainId,
                     tokenId:   String(tokenId),
                     token0:    priceAddr0, token1:    priceAddr1,
                     sym0:      m0.symbol,  sym1:      m1.symbol,
@@ -494,6 +567,9 @@ final class UniswapService: ObservableObject {
                 continue // stale tokenId — contract returned null, position no longer exists
             } catch {
                 rawPositions.append(Position(
+                    chainID: chain.id,
+                    chainName: chain.displayName,
+                    chainNumericID: chain.chainId,
                     tokenId: String(tokenId), token0: "", token1: "",
                     sym0: "", sym1: "", feePct: "", feeRaw: 0,
                     fees0: 0, fees1: 0, tickLower: 0, tickUpper: 0,
@@ -506,7 +582,11 @@ final class UniswapService: ObservableObject {
         guard !rawPositions.isEmpty else { return ([], 0, nil) }
 
         // 4 · prices
-        let priceMap = await priceService.fetchPrices(for: Array(tokenAddrs))
+        let priceMap = await priceService.fetchPrices(
+            for: Array(tokenAddrs),
+            coingeckoPlatformID: chain.coingeckoPlatformID,
+            defiLlamaChainKey: chain.defiLlamaChainKey
+        )
 
         // 5 · in-range + amounts + fees
         var finalPositions: [Position] = []
@@ -537,7 +617,7 @@ final class UniswapService: ObservableObject {
                     let fees = try await computeV4Fees(
                         poolId: pid, tokenId: tokenId,
                         tickLower: p.tickLower, tickUpper: p.tickUpper,
-                        currentTick: tick, liquidityRaw: p.liquidity, eth: eth)
+                        currentTick: tick, liquidityRaw: p.liquidity, eth: eth, v4SV: v4SV, v4PM: v4PM)
                     let dec0 = metaCache[p.token0.lowercased()]?.decimals ?? 18
                     let dec1 = metaCache[p.token1.lowercased()]?.decimals ?? 18
                     p.fees0 = fees.fees0 / pow(10.0, Double(dec0))
@@ -570,7 +650,9 @@ final class UniswapService: ObservableObject {
         poolId: Data, tokenId: UInt64,
         tickLower: Int, tickUpper: Int,
         currentTick: Int, liquidityRaw: Double,
-        eth: EthereumClient
+        eth: EthereumClient,
+        v4SV: String,
+        v4PM: String
     ) async throws -> (fees0: Double, fees1: Double) {
         async let posTask  = eth.ethCall(to: v4SV, data: ABI.v4CallGetPosition(
             poolId: poolId, owner: v4PM,
@@ -689,22 +771,22 @@ final class UniswapService: ObservableObject {
         return meta
     }
 
-    private func loadV4OwnershipCache(wallet: String) -> V4OwnershipCache? {
-        let key = v4OwnershipCacheKey(wallet: wallet)
+    private func loadV4OwnershipCache(wallet: String, chain: SupportedChain) -> V4OwnershipCache? {
+        let key = v4OwnershipCacheKey(wallet: wallet, chain: chain)
         guard let data = UserDefaults.standard.data(forKey: key) else { return nil }
         return try? JSONDecoder().decode(V4OwnershipCache.self, from: data)
     }
 
-    private func saveV4OwnershipCache(_ cache: V4OwnershipCache, wallet: String) {
-        let key = v4OwnershipCacheKey(wallet: wallet)
+    private func saveV4OwnershipCache(_ cache: V4OwnershipCache, wallet: String, chain: SupportedChain) {
+        let key = v4OwnershipCacheKey(wallet: wallet, chain: chain)
         if let data = try? JSONEncoder().encode(cache) {
             UserDefaults.standard.set(data, forKey: key)
         }
     }
 
-    private func v4OwnershipCacheKey(wallet: String) -> String {
+    private func v4OwnershipCacheKey(wallet: String, chain: SupportedChain) -> String {
         let normalized = wallet.lowercased()
-        return "v4OwnershipCache.eth-mainnet.\(normalized)"
+        return "v4OwnershipCache.\(chain.id).\(normalized)"
     }
 
     private func configureTimer() {
@@ -747,8 +829,8 @@ private struct V4FeesError: LocalizedError {
 
 // MARK: - Utilities
 
-private func isNativeETH(_ addr: String) -> Bool {
-    addr.lowercased() == nativeETHAddress
+private func isNativeToken(_ addr: String) -> Bool {
+    addr.lowercased() == nativeTokenAddress
 }
 
 private func shortenAddr(_ addr: String) -> String {

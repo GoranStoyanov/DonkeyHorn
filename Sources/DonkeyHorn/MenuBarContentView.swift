@@ -276,6 +276,16 @@ struct PositionCard: View {
                         .padding(.horizontal, 4)
                         .padding(.vertical, 1)
                         .background(Color.secondary.opacity(0.1), in: Capsule())
+                    if let chain = SupportedChain.byID(pos.chainID) {
+                        ChainIconView(chain: chain, size: 14)
+                    } else {
+                        Text(pos.chainLabel)
+                            .font(.system(size: 9, weight: .semibold))
+                            .foregroundStyle(Color.blue)
+                            .padding(.horizontal, 4)
+                            .padding(.vertical, 1)
+                            .background(Color.blue.opacity(0.1), in: Capsule())
+                    }
                     Spacer()
                     if let label = pos.positionUSDLabel ?? pos.feesUSDLabel {
                         Text(label)
@@ -399,9 +409,12 @@ struct PositionCard: View {
     }
 
     private func openInUniswap() {
-        let urlStr = pos.isV4
-            ? "https://app.uniswap.org/positions/v4/1/\(pos.tokenId)"
-            : "https://app.uniswap.org/pools/\(pos.tokenId)"
+        let urlStr: String
+        if pos.isV4 {
+            urlStr = "https://app.uniswap.org/positions/v4/\(pos.chainNumericID)/\(pos.tokenId)"
+        } else {
+            urlStr = "https://app.uniswap.org/pools/\(pos.tokenId)?chain=\(pos.chainID)"
+        }
         guard let url = URL(string: urlStr) else { return }
         NSWorkspace.shared.open(url)
     }

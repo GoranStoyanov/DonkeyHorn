@@ -3,14 +3,18 @@ import Foundation
 actor PriceService {
     /// Returns a map of lowercase address → USD price.
     /// Tries CoinGecko first; backfills missing tokens with DefiLlama.
-    func fetchPrices(for addresses: [String]) async -> [String: Double] {
+    func fetchPrices(
+        for addresses: [String],
+        coingeckoPlatformID: String,
+        defiLlamaChainKey: String
+    ) async -> [String: Double] {
         let unique = Array(Set(addresses.map { $0.lowercased() }))
         guard !unique.isEmpty else { return [:] }
 
-        var result = await coingecko(unique)
+        var result = await coingecko(unique, platformID: coingeckoPlatformID)
         let missing = unique.filter { result[$0] == nil }
         if !missing.isEmpty {
-            for (k, v) in await defillama(missing) where result[k] == nil {
+            for (k, v) in await defillama(missing, chainKey: defiLlamaChainKey) where result[k] == nil {
                 result[k] = v
             }
         }
@@ -19,10 +23,10 @@ actor PriceService {
 
     // MARK: - Sources
 
-    private func coingecko(_ addresses: [String]) async -> [String: Double] {
+    private func coingecko(_ addresses: [String], platformID: String) async -> [String: Double] {
         let qs = addresses.joined(separator: ",")
             .addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
-        let urlStr = "https://api.coingecko.com/api/v3/simple/token_price/ethereum"
+        let urlStr = "https://api.coingecko.com/api/v3/simple/token_price/\(platformID)"
             + "?contract_addresses=\(qs)&vs_currencies=usd"
         guard let url = URL(string: urlStr) else { return [:] }
         do {
@@ -34,8 +38,8 @@ actor PriceService {
         } catch { return [:] }
     }
 
-    private func defillama(_ addresses: [String]) async -> [String: Double] {
-        let qs = addresses.map { "ethereum:\($0)" }.joined(separator: ",")
+    private func defillama(_ addresses: [String], chainKey: String) async -> [String: Double] {
+        let qs = addresses.map { "\(chainKey):\($0)" }.joined(separator: ",")
         guard let url = URL(string: "https://coins.llama.fi/prices/current/\(qs)") else { return [:] }
         do {
             let (data, _) = try await URLSession.shared.data(from: url)

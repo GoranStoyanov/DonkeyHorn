@@ -1,0 +1,51 @@
+import SwiftUI
+#if canImport(AppKit)
+import AppKit
+#endif
+
+struct ChainIconView: View {
+    let chain: SupportedChain
+    let size: CGFloat
+    @ObservedObject private var iconStore = NetworkIconStore.shared
+
+    init(chain: SupportedChain, size: CGFloat = 16) {
+        self.chain = chain
+        self.size = size
+    }
+
+    var body: some View {
+        Group {
+#if canImport(AppKit)
+            if let icon = iconStore.icon(for: chain) {
+                Image(nsImage: icon)
+                    .resizable()
+                    .interpolation(.high)
+                    .scaledToFill()
+            } else {
+                fallbackIcon
+            }
+#else
+            fallbackIcon
+#endif
+        }
+        .frame(width: size, height: size)
+        .clipShape(RoundedRectangle(cornerRadius: size * 0.25, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: size * 0.25, style: .continuous)
+                .stroke(Color.white.opacity(0.25), lineWidth: 0.6)
+        )
+        .onAppear {
+            Task { await iconStore.prefetch(for: [chain]) }
+        }
+    }
+
+    private var fallbackIcon: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: size * 0.25, style: .continuous)
+                .fill(Color.secondary.opacity(0.22))
+            Text(String(chain.displayName.prefix(1)).uppercased())
+                .font(.system(size: max(8, size * 0.55), weight: .semibold))
+                .foregroundStyle(.secondary)
+        }
+    }
+}
