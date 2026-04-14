@@ -9,6 +9,17 @@ private let v4PM           = "0xbD216513d74C8cf14cf4747E6AaA6420FF64ee9E"
 private let v4SV           = "0x7fFE42C4a5DEeA5b0feC41C94C136Cf115597227"
 /// First block to scan for v4 Transfer events (~Jan 2025, before v4 mainnet launch).
 private let v4PMDeployBlock = "0x14A0000"
+private let v4LogsChunkSize = 12_000
+private let v4LogsMaxConcurrentRequests = 2
+private let v4ReorgLookbackBlocks = 24
+private let v4BootstrapMaxChunksPerRefresh = 80
+
+private struct V4OwnershipCache: Codable {
+    let lastScannedBlock: Int
+    let candidateTokenIds: [UInt64]
+    let ownedTokenIds: [UInt64]
+    let nextBootstrapFromBlock: Int?
+}
 
 /// Native ETH in Uniswap v4 is represented as address(0).
 /// We substitute WETH for price lookups since CoinGecko/DefiLlama index by token address.
@@ -93,7 +104,7 @@ final class UniswapService: ObservableObject {
             let d = try await eth.ethCall(to: v3NFPM, data: ABI.callBalanceOf(owner: wallet))
             numPos = Int(d.readUInt64(wordAt: 0))
         } catch EthereumClient.Err.noResult {
-            return ([], 0, nil)
+            return ([], 0, "v3: balanceOf returned no result (RPC did not return a usable payload)")
         } catch {
             return ([], 0, error.localizedDescription)
         }
@@ -220,8 +231,7 @@ final class UniswapService: ObservableObject {
             guard numData.count >= 32 else { return ([], 0, "v4: unexpected balanceOf response") }
             v4Balance = numData.readUInt64(wordAt: 0)
         } catch EthereumClient.Err.noResult {
-            // v4 PositionManager not deployed on this network — no v4 positions
-            return ([], 0, nil)
+            return ([], 0, "v4: balanceOf returned no result (RPC did not return a usable payload)")
         } catch {
             return ([], 0, "v4: balanceOf failed – \(error.localizedDescription)")
         }
@@ -242,36 +252,79 @@ final class UniswapService: ObservableObject {
         // transferSig is hardcoded (known keccak256) to avoid any keccak implementation variance.
         let transferSig = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"
 
-        // Paginate eth_getLogs in 50k-block chunks run in parallel.
-        // Most RPCs silently return [] for ranges > ~10k-50k blocks,
-        // so a single query from the deploy block to "latest" often yields nothing.
+        // Pull block head once, then only scan deltas from the last successful sync
+        // (with a short reorg lookback).
         let currentBlock: Int
         do { currentBlock = try await eth.ethBlockNumber() }
         catch { return ([], 0, "v4: eth_blockNumber failed – \(error.localizedDescription)") }
 
         let deployBlock = Int(v4PMDeployBlock.dropFirst(2), radix: 16)!
-        let chunkSize   = 50_000
-        let chunks = stride(from: deployBlock, through: currentBlock, by: chunkSize).map { start -> (String, String) in
-            let end = min(start + chunkSize - 1, currentBlock)
+        let previousCache = loadV4OwnershipCache(wallet: wallet)
+        let hasCache = previousCache != nil
+        let bootstrapFrom = previousCache?.nextBootstrapFromBlock ?? (hasCache ? nil : deployBlock)
+        let scanStartBlock = bootstrapFrom ?? max(
+            deployBlock,
+            (previousCache?.lastScannedBlock ?? deployBlock) - v4ReorgLookbackBlocks
+        )
+        let scanEndBlock: Int = {
+            guard let b = bootstrapFrom else { return currentBlock }
+            let maxSpan = v4LogsChunkSize * v4BootstrapMaxChunksPerRefresh
+            return min(b + maxSpan - 1, currentBlock)
+        }()
+        let chunkSize = v4LogsChunkSize
+        let chunks = stride(from: scanStartBlock, through: scanEndBlock, by: chunkSize).map { start -> (String, String) in
+            let end = min(start + chunkSize - 1, scanEndBlock)
             return ("0x" + String(start, radix: 16), "0x" + String(end, radix: 16))
         }
 
-        let toLogs: [[String: Any]]
-        do {
-            toLogs = try await withThrowingTaskGroup(of: [[String: Any]].self) { group in
-                for (from, to) in chunks {
-                    group.addTask {
-                        try await eth.ethGetLogs(address: v4PM,
-                                                 topics: [transferSig, nil, walletPadded],
-                                                 fromBlock: from, toBlock: to)
+        var toLogs: [[String: Any]] = []
+        var fromLogs: [[String: Any]] = []
+        for batchStart in stride(from: 0, to: chunks.count, by: v4LogsMaxConcurrentRequests) {
+            let batchEnd = min(batchStart + v4LogsMaxConcurrentRequests, chunks.count)
+            let batch = Array(chunks[batchStart..<batchEnd])
+
+            do {
+                let batchLogs = try await withThrowingTaskGroup(of: (to: [[String: Any]], from: [[String: Any]]).self) { group in
+                    for (from, to) in batch {
+                        group.addTask {
+                            let incoming = try await eth.ethGetLogs(
+                                address: v4PM,
+                                topics: [transferSig, nil, walletPadded],
+                                fromBlock: from,
+                                toBlock: to,
+                                context: "[to]"
+                            )
+                            let outgoing: [[String: Any]]
+                            if hasCache && bootstrapFrom == nil {
+                                outgoing = try await eth.ethGetLogs(
+                                    address: v4PM,
+                                    topics: [transferSig, walletPadded, nil],
+                                    fromBlock: from,
+                                    toBlock: to,
+                                    context: "[from]"
+                                )
+                            } else {
+                                // First full bootstrap does not need "from" logs:
+                                // every outgoing token must have appeared in a prior incoming event.
+                                outgoing = []
+                            }
+                            return (to: incoming, from: outgoing)
+                        }
                     }
+                    var allTo: [[String: Any]] = []
+                    var allFrom: [[String: Any]] = []
+                    for try await part in group {
+                        allTo.append(contentsOf: part.to)
+                        allFrom.append(contentsOf: part.from)
+                    }
+                    return (to: allTo, from: allFrom)
                 }
-                var all: [[String: Any]] = []
-                for try await chunk in group { all.append(contentsOf: chunk) }
-                return all
+                toLogs.append(contentsOf: batchLogs.to)
+                fromLogs.append(contentsOf: batchLogs.from)
+            } catch {
+                let sampleRange = batch.first.map { "\($0.0)-\($0.1)" } ?? "unknown-range"
+                return ([], 0, "v4: Transfer log query failed near \(sampleRange) – \(error.localizedDescription)")
             }
-        } catch {
-            return ([], 0, "v4: Transfer log query failed – \(error.localizedDescription)")
         }
 
         func extractTokenId(_ log: [String: Any]) -> UInt64? {
@@ -280,33 +333,98 @@ final class UniswapService: ObservableObject {
             guard let val = UInt64(hex.suffix(16), radix: 16) else { return nil }
             return val
         }
-        let candidateIds = Set(toLogs.compactMap(extractTokenId))
-        guard !candidateIds.isEmpty else {
+        let toIds = Set(toLogs.compactMap(extractTokenId))
+        let fromIds = Set(fromLogs.compactMap(extractTokenId))
+        var candidateIds = Set(previousCache?.candidateTokenIds ?? [])
+        candidateIds.formUnion(toIds)
+        candidateIds.formUnion(fromIds)
+
+        var ownedIds = Set(previousCache?.ownedTokenIds ?? [])
+
+        let nextBootstrapFromBlock: Int? = {
+            guard bootstrapFrom != nil else { return nil }
+            let reachedHead = scanEndBlock >= currentBlock
+            if reachedHead { return nil }
+            return scanEndBlock + 1
+        }()
+
+        if candidateIds.isEmpty {
+            saveV4OwnershipCache(
+                V4OwnershipCache(
+                    lastScannedBlock: scanEndBlock,
+                    candidateTokenIds: [],
+                    ownedTokenIds: [],
+                    nextBootstrapFromBlock: nextBootstrapFromBlock
+                ),
+                wallet: wallet
+            )
+            if let next = nextBootstrapFromBlock {
+                return ([], 0, "v4: bootstrap scan in progress (next from 0x\(String(next, radix: 16)))")
+            }
             return ([], 0, "v4: no Transfer events found for this wallet (balance=\(v4Balance))")
         }
 
-        // Verify current ownership via ownerOf() — handles re-transfers, staking, etc.
-        // Run all ownerOf calls concurrently.
-        let ownedIds = await withTaskGroup(of: Optional<UInt64>.self) { group -> [UInt64] in
-            for tokenId in candidateIds {
+        // Verify ownership only for tokenIds that changed since the last scan.
+        // First sync verifies all candidates once.
+        let idsToVerify: [UInt64] = {
+            if previousCache == nil { return Array(candidateIds) }
+            return Array(toIds.union(fromIds))
+        }()
+
+        let ownershipUpdates = await withTaskGroup(of: (UInt64, Bool)?.self) { group -> [(UInt64, Bool)] in
+            for tokenId in idsToVerify {
                 group.addTask {
                     guard let data = try? await eth.ethCall(
                         to: v4PM, data: ABI.callOwnerOf(tokenId: tokenId)
                     ) else { return nil }
-                    return data.readAddress(wordAt: 0).lowercased() == wallet.lowercased()
-                        ? tokenId : nil
+                    let isOwner = data.readAddress(wordAt: 0).lowercased() == wallet.lowercased()
+                    return (tokenId, isOwner)
                 }
             }
-            var result: [UInt64] = []
-            for await id in group { if let id { result.append(id) } }
+            var result: [(UInt64, Bool)] = []
+            for await update in group { if let update { result.append(update) } }
             return result
         }
+        for (tokenId, isOwner) in ownershipUpdates {
+            if isOwner { ownedIds.insert(tokenId) }
+            else { ownedIds.remove(tokenId) }
+        }
+
+        // Safety net: if cache and live balance diverge, do one full ownership reconciliation.
+        if Int(v4Balance) != ownedIds.count {
+            let fullOwned = await withTaskGroup(of: Optional<UInt64>.self) { group -> [UInt64] in
+                for tokenId in candidateIds {
+                    group.addTask {
+                        guard let data = try? await eth.ethCall(
+                            to: v4PM, data: ABI.callOwnerOf(tokenId: tokenId)
+                        ) else { return nil }
+                        return data.readAddress(wordAt: 0).lowercased() == wallet.lowercased()
+                            ? tokenId : nil
+                    }
+                }
+                var result: [UInt64] = []
+                for await id in group { if let id { result.append(id) } }
+                return result
+            }
+            ownedIds = Set(fullOwned)
+        }
+
         guard !ownedIds.isEmpty else {
             return ([], 0, "v4: balance=\(v4Balance), found \(candidateIds.count) candidate tokenIds but none pass ownerOf check")
         }
 
+        saveV4OwnershipCache(
+            V4OwnershipCache(
+                lastScannedBlock: scanEndBlock,
+                candidateTokenIds: Array(candidateIds).sorted(),
+                ownedTokenIds: Array(ownedIds).sorted(),
+                nextBootstrapFromBlock: nextBootstrapFromBlock
+            ),
+            wallet: wallet
+        )
+
         // 3 · per-position
-        for tokenId in ownedIds {
+        for tokenId in ownedIds.sorted() {
             do {
                 // getPoolAndPositionInfo returns:
                 //   word 0: currency0 (address)   word 1: currency1 (address)
@@ -568,6 +686,24 @@ final class UniswapService: ObservableObject {
         let meta = (symbol: sym, decimals: dec)
         cache[key] = meta
         return meta
+    }
+
+    private func loadV4OwnershipCache(wallet: String) -> V4OwnershipCache? {
+        let key = v4OwnershipCacheKey(wallet: wallet)
+        guard let data = UserDefaults.standard.data(forKey: key) else { return nil }
+        return try? JSONDecoder().decode(V4OwnershipCache.self, from: data)
+    }
+
+    private func saveV4OwnershipCache(_ cache: V4OwnershipCache, wallet: String) {
+        let key = v4OwnershipCacheKey(wallet: wallet)
+        if let data = try? JSONEncoder().encode(cache) {
+            UserDefaults.standard.set(data, forKey: key)
+        }
+    }
+
+    private func v4OwnershipCacheKey(wallet: String) -> String {
+        let normalized = wallet.lowercased()
+        return "v4OwnershipCache.eth-mainnet.\(normalized)"
     }
 }
 
