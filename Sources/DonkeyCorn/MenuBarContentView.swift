@@ -215,7 +215,9 @@ struct PositionCard: View {
                     }
                 }
                 // Row 2: range bar (hidden for full-range positions)
-                if let tick = pos.currentTick, !pos.isFullRange {
+                if pos.isFullRange {
+                    FullRangeTickBar(currentTick: pos.currentTick)
+                } else if let tick = pos.currentTick {
                     TickRangeBar(
                         tickLower: pos.tickLower,
                         tickUpper: pos.tickUpper,
@@ -226,6 +228,12 @@ struct PositionCard: View {
                 // Row 3: range badge + distribution
                 HStack(spacing: 6) {
                     rangeBadge
+                    if let distance = rangeDistanceLabel {
+                        Text(distance)
+                            .font(.system(size: 10, weight: .medium, design: .monospaced))
+                            .foregroundStyle(rangeColor)
+                            .lineLimit(1)
+                    }
                     let dist = pos.distributionLabel
                     if !dist.isEmpty {
                         Text(dist)
@@ -289,6 +297,39 @@ struct PositionCard: View {
         }
     }
 
+    private var rangeDistanceLabel: String? {
+        guard let tick = pos.currentTick, !pos.isFullRange else { return nil }
+        if tick < pos.tickLower {
+            return "below \(percentDistance(from: tick, toBoundary: pos.tickLower))"
+        }
+        if tick > pos.tickUpper {
+            return "above \(percentDistance(from: tick, toBoundary: pos.tickUpper))"
+        }
+        return nil
+    }
+
+    private func percentDistance(from tick: Int, toBoundary boundary: Int) -> String {
+        let diff = abs(tick - boundary)
+        let exponent = Double(diff) * log(1.0001)
+
+        // For very large gaps, percentage becomes unreadable noise; use tick distance instead.
+        if exponent > log(1_000) { // >1000x price move
+            return "+\(compactInt(diff)) ticks"
+        }
+
+        let pct = (exp(exponent) - 1.0) * 100.0
+        if pct >= 1000 { return String(format: "%.0f%%", pct) }
+        if pct >= 10   { return String(format: "%.1f%%", pct) }
+        return String(format: "%.2f%%", pct)
+    }
+
+    private func compactInt(_ value: Int) -> String {
+        let n = Double(value)
+        if n >= 1_000_000 { return String(format: "%.1fM", n / 1_000_000).replacingOccurrences(of: ".0M", with: "M") }
+        if n >= 1_000 { return String(format: "%.1fk", n / 1_000).replacingOccurrences(of: ".0k", with: "k") }
+        return String(value)
+    }
+
     private func openInUniswap() {
         let urlStr = pos.isV4
             ? "https://app.uniswap.org/positions/v4/1/\(pos.tokenId)"
@@ -346,6 +387,7 @@ struct TickRangeBar: View {
     let tickUpper: Int
     let currentTick: Int
     let inRange: Bool?
+    @State private var animatedTick: Double
 
     private var accent: Color {
         switch inRange {
@@ -355,58 +397,153 @@ struct TickRangeBar: View {
         }
     }
 
+    init(tickLower: Int, tickUpper: Int, currentTick: Int, inRange: Bool?) {
+        self.tickLower = tickLower
+        self.tickUpper = tickUpper
+        self.currentTick = currentTick
+        self.inRange = inRange
+        _animatedTick = State(initialValue: Double(currentTick))
+    }
+
     var body: some View {
-        Canvas { ctx, size in
-            let w = size.width
-            let midY = size.height / 2
-            let span = Double(tickUpper - tickLower)
-            guard span > 0 else { return }
+        VStack(spacing: 2) {
+            Canvas { ctx, size in
+                let w = size.width
+                let midY = size.height / 2
+                let span = Double(tickUpper - tickLower)
+                guard span > 0 else { return }
 
-            // Display window: 1.5× the range on each side, so the range
-            // occupies the centre third of the bar.
-            let dMin = Double(tickLower) - span * 1.5
-            let dSpan = span * 4.0
+                // Display window: 1.5× the range on each side, so the range
+                // occupies the centre third of the bar.
+                let dMin = Double(tickLower) - span * 1.5
+                let dSpan = span * 4.0
 
-            func px(_ tick: Int) -> Double {
-                (Double(tick) - dMin) / dSpan * Double(w)
-            }
+                func px(_ tick: Double) -> Double {
+                    (tick - dMin) / dSpan * Double(w)
+                }
 
-            let lx = px(tickLower)
-            let rx = px(tickUpper)
-            // Clamp needle so it's always visible; a tiny inset keeps it
-            // fully inside the canvas even when very far out of range.
-            let nx = min(max(px(currentTick), 2), Double(w) - 2)
+                let lx = px(Double(tickLower))
+                let rx = px(Double(tickUpper))
+                let rawNeedleX = px(animatedTick)
+                // Clamp needle so it's always visible; a tiny inset keeps it
+                // fully inside the canvas even when very far out of range.
+                let nx = min(max(rawNeedleX, 2), Double(w) - 2)
 
-            // ── track (full width, subtle) ──────────────────────────────
-            ctx.fill(
-                Path(roundedRect: .init(x: 0, y: midY - 1.5, width: Double(w), height: 3),
-                     cornerRadius: 1.5),
-                with: .color(.primary.opacity(0.08))
-            )
-
-            // ── range fill ──────────────────────────────────────────────
-            ctx.fill(
-                Path(roundedRect: .init(x: lx, y: midY - 1.5, width: rx - lx, height: 3),
-                     cornerRadius: 1.5),
-                with: .color(accent.opacity(0.28))
-            )
-
-            // ── range boundary ticks (thin, slightly taller than track) ─
-            for bx in [lx, rx] {
+                // ── track (full width, subtle) ──────────────────────────────
                 ctx.fill(
-                    Path(roundedRect: .init(x: bx - 0.75, y: midY - 5, width: 1.5, height: 10),
-                         cornerRadius: 0.75),
-                    with: .color(.secondary.opacity(0.4))
+                    Path(roundedRect: .init(x: 0, y: midY - 1.5, width: Double(w), height: 3),
+                         cornerRadius: 1.5),
+                    with: .color(.primary.opacity(0.08))
                 )
-            }
 
-            // ── current-price needle (tallest element, colored) ─────────
-            ctx.fill(
-                Path(roundedRect: .init(x: nx - 1.25, y: midY - 7, width: 2.5, height: 14),
-                     cornerRadius: 1.25),
-                with: .color(accent)
-            )
+                // ── range fill ──────────────────────────────────────────────
+                ctx.fill(
+                    Path(roundedRect: .init(x: lx, y: midY - 1.5, width: rx - lx, height: 3),
+                         cornerRadius: 1.5),
+                    with: .color(accent.opacity(0.28))
+                )
+
+                // Distinct out-of-range style: diagonal stripe overlay.
+                if inRange == false {
+                    var x = lx
+                    while x <= rx + 6 {
+                        var stripe = Path()
+                        stripe.move(to: CGPoint(x: x, y: midY - 4))
+                        stripe.addLine(to: CGPoint(x: x + 6, y: midY + 4))
+                        ctx.stroke(stripe, with: .color(accent.opacity(0.35)), lineWidth: 0.9)
+                        x += 6
+                    }
+                }
+
+                // ── range boundary ticks (thin, slightly taller than track) ─
+                for bx in [lx, rx] {
+                    ctx.fill(
+                        Path(roundedRect: .init(x: bx - 0.75, y: midY - 5, width: 1.5, height: 10),
+                             cornerRadius: 0.75),
+                        with: .color(.secondary.opacity(0.4))
+                    )
+                }
+
+                // ── current-price needle (tallest element, colored) ─────────
+                ctx.fill(
+                    Path(roundedRect: .init(x: nx - 1.25, y: midY - 7, width: 2.5, height: 14),
+                         cornerRadius: 1.25),
+                    with: .color(accent)
+                )
+
+                // Off-scale direction indicator when current price lies outside visible window.
+                if rawNeedleX < 0 {
+                    var arrow = Path()
+                    arrow.move(to: CGPoint(x: 1, y: midY))
+                    arrow.addLine(to: CGPoint(x: 7, y: midY - 4))
+                    arrow.addLine(to: CGPoint(x: 7, y: midY + 4))
+                    arrow.closeSubpath()
+                    ctx.fill(arrow, with: .color(accent.opacity(0.85)))
+                } else if rawNeedleX > Double(w) {
+                    var arrow = Path()
+                    arrow.move(to: CGPoint(x: Double(w) - 1, y: midY))
+                    arrow.addLine(to: CGPoint(x: Double(w) - 7, y: midY - 4))
+                    arrow.addLine(to: CGPoint(x: Double(w) - 7, y: midY + 4))
+                    arrow.closeSubpath()
+                    ctx.fill(arrow, with: .color(accent.opacity(0.85)))
+                }
+            }
+            .frame(height: 14)
+
+            // Numeric anchors for quick orientation.
+            HStack {
+                Text(String(tickLower))
+                Spacer()
+                Text(String(Int(animatedTick.rounded())))
+                    .foregroundStyle(accent)
+                Spacer()
+                Text(String(tickUpper))
+            }
+            .font(.system(size: 9, weight: .regular, design: .monospaced))
+            .foregroundStyle(.tertiary)
         }
-        .frame(height: 14)
+        .animation(.easeInOut(duration: 0.35), value: animatedTick)
+        .onChange(of: currentTick) { _, nextTick in
+            withAnimation(.easeInOut(duration: 0.35)) {
+                animatedTick = Double(nextTick)
+            }
+        }
+        .help("Range [\(String(tickLower)), \(String(tickUpper))] • current \(String(currentTick))")
+    }
+}
+
+struct FullRangeTickBar: View {
+    let currentTick: Int?
+
+    var body: some View {
+        VStack(spacing: 2) {
+            GeometryReader { geo in
+                let w = geo.size.width
+                ZStack(alignment: .leading) {
+                    Capsule()
+                        .fill(Color.blue.opacity(0.18))
+                    Capsule()
+                        .stroke(Color.blue.opacity(0.35), lineWidth: 1)
+                    if currentTick != nil {
+                        Capsule()
+                            .fill(Color.blue.opacity(0.9))
+                            .frame(width: 3, height: 14)
+                            .offset(x: w / 2 - 1.5)
+                    }
+                }
+            }
+            .frame(height: 14)
+
+            HStack {
+                Text("full range")
+                Spacer()
+                if let tick = currentTick {
+                    Text("tick \(tick)")
+                }
+            }
+            .font(.system(size: 9, weight: .regular, design: .monospaced))
+            .foregroundStyle(.tertiary)
+        }
+        .help("Full-range position")
     }
 }
