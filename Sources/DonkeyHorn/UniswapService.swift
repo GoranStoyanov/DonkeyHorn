@@ -25,6 +25,8 @@ final class UniswapService: ObservableObject {
     private let priceService = PriceService()
     private var timer: Timer?
     private var refreshIntervalCancellable: AnyCancellable?
+    private var activeLoadTask: Task<Void, Never>?
+    private var loadGeneration: UInt64 = 0
 
     private struct ChainLoadResult {
         let positions: [Position]
@@ -37,23 +39,38 @@ final class UniswapService: ObservableObject {
         refreshIntervalCancellable = AppSettings.shared.$refreshIntervalMinutes
             .removeDuplicates()
             .sink { [weak self] _ in self?.configureTimer() }
-        Task { await load() }
+        startLoad()
     }
 
-    func refresh() { Task { await load() } }
+    func refresh() { startLoad() }
 
     // MARK: - Orchestrator
 
-    private func load() async {
+    private func startLoad() {
+        activeLoadTask?.cancel()
+        loadGeneration &+= 1
+        let generation = loadGeneration
+        activeLoadTask = Task { [weak self] in
+            await self?.load(generation: generation)
+        }
+    }
+
+    private func isCurrentGeneration(_ generation: UInt64) -> Bool {
+        generation == loadGeneration
+    }
+
+    private func load(generation: UInt64) async {
         let wallet = AppSettings.shared.walletAddress
         let key = AppSettings.shared.infuraAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
         let chains = AppSettings.shared.enabledChains()
         guard !wallet.isEmpty, !key.isEmpty, !chains.isEmpty else {
+            guard isCurrentGeneration(generation) else { return }
             titleText = "🦄 –"
             lastError = "Configure wallet, Infura API key, and at least one enabled network in Settings (⌘,)"
             return
         }
 
+        guard isCurrentGeneration(generation), !Task.isCancelled else { return }
         isLoading = true
         lastError = nil
         LogStore.shared.log("refresh started", level: .info)
@@ -69,6 +86,7 @@ final class UniswapService: ObservableObject {
             return collected
         }
 
+        guard isCurrentGeneration(generation), !Task.isCancelled else { return }
         let all = results.flatMap(\.positions)
         positions = all.sorted { lhs, rhs in
             (lhs.positionUSD ?? lhs.usd ?? 0) > (rhs.positionUSD ?? rhs.usd ?? 0)
@@ -793,7 +811,7 @@ final class UniswapService: ObservableObject {
         timer?.invalidate()
         let interval = TimeInterval(AppSettings.shared.refreshIntervalMinutes * 60)
         timer = .scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] _ in
-            Task { await self?.load() }
+            Task { @MainActor in self?.startLoad() }
         }
     }
 }
