@@ -46,6 +46,24 @@ A macOS menu bar app for monitoring your [Uniswap v3](https://uniswap.org) and [
 - Launch at Login support (toggle in Settings)
 - Native macOS app — no Electron, no web view
 
+## Product Screenshots
+
+Main menu bar popup:
+
+![Poolser main popup](docs/screenshots/positions.png)
+
+Menu bar overview:
+
+![Poolser menu bar overview](docs/screenshots/menubar-overview.png)
+
+Settings:
+
+![Poolser settings](docs/screenshots/settings.png)
+
+Logs:
+
+![Poolser logs](docs/screenshots/logs.png)
+
 ## Requirements
 
 - macOS 14 (Sonoma) or later
