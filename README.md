@@ -37,6 +37,8 @@ A macOS menu bar app for monitoring your [Uniswap v3](https://uniswap.org) and [
   - stale refresh protection (older in-flight loads cannot override newer refreshes)
 - Incremental v4 ownership discovery:
   - bootstrap scan is chunked and resumable
+  - bootstrap follow-ups run per chain (accelerated while in progress)
+  - in-app bootstrap status shows live countdown to next auto-refresh
   - ownership cache avoids rescanning full history every refresh
 - Chain icons in UI (downloaded once from CoinGecko and cached locally)
 - Reads data directly from chain RPC (Infura endpoints derived from your API key), with no third-party indexer
@@ -105,7 +107,9 @@ Important behavior:
   - last scanned block
   - candidate token IDs
   - currently owned token IDs
-- First-time bootstrap is bounded per refresh and resumes next refresh until caught up
+- next bootstrap cursor block (`nextBootstrapFromBlock`) for resume
+- First-time bootstrap progresses in chunks and resumes from cache until caught up
+- While bootstrap is active, Poolser schedules accelerated per-chain follow-up refreshes (without changing the normal global refresh interval)
 
 ## RPC Rate Limiting Notes
 
@@ -126,8 +130,11 @@ If your provider still rate-limits frequently:
 - `RPC: HTTP 429`
   - Your RPC provider is throttling requests. See the rate-limiting section above.
 
-- `v4: bootstrap scan in progress (next from 0x...)`
-  - Expected on first sync for wallets with long history. The app resumes from that block next refresh.
+- `v4: bootstrap scan in progress (auto-refresh in ~Xs from 0x...)`
+  - Expected on first sync for wallets with long history. `0x...` is the next resume block and `~Xs` is a live countdown.
+
+- `v4: bootstrap refresh in progress (from 0x...)`
+  - Countdown reached zero and the accelerated follow-up refresh is currently running for that chain.
 
 - `v4: no Transfer events found for this wallet (balance=N)`
   - Usually indicates incomplete log coverage from the RPC provider, or bootstrap not completed yet.
