@@ -9,9 +9,9 @@ final class AppSettings: ObservableObject {
         static let refreshIntervalMinutes = 10
         static let enabledChainIDs = ["ethereum"]
         static let rpcCreditsPerSecondBudget = 400
-        static let v4LogChunkSize = 12_000
-        static let v4LogMaxConcurrentRequests = 2
-        static let v4BootstrapMaxChunksPerRefresh = 80
+        static let v4LogChunkSize = 20_000
+        static let v4LogMaxConcurrentRequests = 3
+        static let v4BootstrapMaxChunksPerRefresh = 120
     }
 
     @Published var walletAddress: String {
