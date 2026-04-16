@@ -11,7 +11,7 @@ struct PoolserApp: App {
             MenuBarContentView()
                 .environmentObject(service)
         } label: {
-            if service.isLoading {
+            if service.isLoading && service.positions.isEmpty {
                 LoadingMenuBarLabel()
             } else {
                 Text(service.titleText)

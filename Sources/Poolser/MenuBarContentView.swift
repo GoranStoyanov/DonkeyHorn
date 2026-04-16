@@ -63,9 +63,15 @@ struct MenuBarContentView: View {
             }
             Spacer()
             Button { service.refresh() } label: {
-                Image(systemName: "arrow.clockwise")
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(.secondary)
+                if service.isLoading {
+                    ProgressView()
+                        .scaleEffect(0.55)
+                        .frame(width: 14, height: 14)
+                } else {
+                    Image(systemName: "arrow.clockwise")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(.secondary)
+                }
             }
             .buttonStyle(.plain)
             .help("Refresh")
@@ -78,7 +84,8 @@ struct MenuBarContentView: View {
 
     @ViewBuilder
     private var contentArea: some View {
-        if service.isLoading {
+        // First load: no positions yet, show full spinner
+        if service.isLoading && service.positions.isEmpty {
             VStack(spacing: 10) {
                 ProgressView()
                     .scaleEffect(0.65)
@@ -93,6 +100,13 @@ struct MenuBarContentView: View {
             .frame(maxWidth: .infinity)
         } else {
             VStack(spacing: 0) {
+                // Thin progress bar during refresh
+                if service.isLoading {
+                    ProgressView(value: nil as Double?)
+                        .progressViewStyle(.linear)
+                        .frame(height: 2)
+                        .tint(.secondary.opacity(0.5))
+                }
                 if let err = service.lastError {
                     HStack(alignment: .top, spacing: 8) {
                         Image(systemName: "exclamationmark.triangle.fill")
