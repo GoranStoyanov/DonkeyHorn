@@ -87,6 +87,9 @@ struct Position: Identifiable {
         if amount1 > 0 { parts.append(trimNum(amount1) + " " + sym1) }
         return parts.joined(separator: " + ")
     }
+
+    var amount0Label: String { amount0 > 0 ? trimNum(amount0) : "0" }
+    var amount1Label: String { amount1 > 0 ? trimNum(amount1) : "0" }
 }
 
 private func formatCompact(_ x: Double) -> String {

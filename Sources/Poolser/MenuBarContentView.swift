@@ -295,7 +295,7 @@ struct PositionCard: View {
                         inRange: pos.inRange
                     )
                 }
-                // Row 3: range badge + distribution
+                // Row 3: range badge + distance
                 HStack(spacing: 6) {
                     rangeBadge
                     if let distance = rangeDistanceLabel {
@@ -304,13 +304,29 @@ struct PositionCard: View {
                             .foregroundStyle(rangeColor)
                             .lineLimit(1)
                     }
-                    let dist = pos.distributionLabel
-                    if !dist.isEmpty {
-                        Text(dist)
+                    Spacer()
+                }
+                // Row 3b: current assets (two columns)
+                HStack(spacing: 0) {
+                    HStack(spacing: 4) {
+                        Text(pos.amount0Label)
+                            .font(.caption.monospacedDigit())
+                        Text(pos.sym0)
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
                     Spacer()
+                    Text("current assets")
+                        .font(.system(size: 9, weight: .medium))
+                        .foregroundStyle(.tertiary)
+                    Spacer()
+                    HStack(spacing: 4) {
+                        Text(pos.amount1Label)
+                            .font(.caption.monospacedDigit())
+                        Text(pos.sym1)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                 }
                 // Row 4: fees + token ID
                 HStack(spacing: 6) {
