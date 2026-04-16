@@ -1,4 +1,5 @@
 import SwiftUI
+import Combine
 
 @main
 struct PoolserApp: App {
@@ -10,8 +11,25 @@ struct PoolserApp: App {
             MenuBarContentView()
                 .environmentObject(service)
         } label: {
-            Text(service.titleText)
+            if service.isLoading {
+                LoadingMenuBarLabel()
+            } else {
+                Text(service.titleText)
+            }
         }
         .menuBarExtraStyle(.window)
+    }
+}
+
+private struct LoadingMenuBarLabel: View {
+    @State private var frame = 0
+    private let timer = Timer.publish(every: 0.4, on: .main, in: .common).autoconnect()
+    private let frames = ["👀 ·", "👀 ··", "👀 ···", "👀 ··"]
+
+    var body: some View {
+        Text(frames[frame])
+            .onReceive(timer) { _ in
+                frame = (frame + 1) % frames.count
+            }
     }
 }
