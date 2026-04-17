@@ -9,7 +9,7 @@ struct MenuBarContentView: View {
     @ObservedObject private var settings = AppSettings.shared
     @State private var showSettings = false
     @State private var showLogs     = false
-    @State private var now = Date()
+    @State private var now          = Date()
     private let clockTick = Timer.publish(every: 30, on: .main, in: .common).autoconnect()
 
     var body: some View {
@@ -151,6 +151,13 @@ struct MenuBarContentView: View {
                             .padding(.vertical, 24)
                             .frame(maxWidth: .infinity)
                     }
+                } else if service.positions.count == 1 {
+                    VStack(spacing: 6) {
+                        ForEach(service.positions) { pos in
+                            PositionCard(pos: pos)
+                        }
+                    }
+                    .padding(10)
                 } else {
                     ScrollView {
                         VStack(spacing: 6) {
@@ -160,7 +167,7 @@ struct MenuBarContentView: View {
                         }
                         .padding(10)
                     }
-                    .frame(maxHeight: 340)
+                    .frame(height: min(CGFloat(service.positions.count) * 210, 560))
                 }
             }
         }
