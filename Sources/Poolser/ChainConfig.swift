@@ -15,6 +15,15 @@ struct SupportedChain: Identifiable, Hashable {
     let v4SV: String?
     let v4DeployBlockHex: String?
 
+    /// Chain slug used in Uniswap web app URLs (e.g. ?chain=mainnet)
+    var uniswapChainSlug: String {
+        switch id {
+        case "ethereum": return "mainnet"
+        case "bsc":      return "bnb"
+        default:         return id
+        }
+    }
+
     var supportsV3: Bool {
         v3Factory != nil && v3NFPM != nil
     }

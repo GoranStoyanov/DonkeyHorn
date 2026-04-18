@@ -477,11 +477,12 @@ struct PositionCard: View {
     }
 
     private func openInUniswap() {
+        let slug = SupportedChain.byID(pos.chainID)?.uniswapChainSlug ?? pos.chainID
         let urlStr: String
         if pos.isV4 {
-            urlStr = "https://app.uniswap.org/positions/v4/\(pos.chainNumericID)/\(pos.tokenId)"
+            urlStr = "https://app.uniswap.org/positions/v4/\(slug)/\(pos.tokenId)"
         } else {
-            urlStr = "https://app.uniswap.org/pools/\(pos.tokenId)?chain=\(pos.chainID)"
+            urlStr = "https://app.uniswap.org/pools/\(pos.tokenId)?chain=\(slug)"
         }
         guard let url = URL(string: urlStr) else { return }
         NSWorkspace.shared.open(url)
