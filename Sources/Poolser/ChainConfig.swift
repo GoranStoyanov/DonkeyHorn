@@ -14,6 +14,7 @@ struct SupportedChain: Identifiable, Hashable {
     let v4PM: String?
     let v4SV: String?
     let v4DeployBlockHex: String?
+    let v3SubgraphID: String?
 
     /// Chain slug used in Uniswap web app URLs (e.g. ?chain=mainnet)
     var uniswapChainSlug: String {
@@ -50,7 +51,8 @@ struct SupportedChain: Identifiable, Hashable {
             wrappedNativeToken: "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
             v4PM: "0xbd216513d74c8cf14cf4747e6aaa6420ff64ee9e",
             v4SV: "0x7ffe42c4a5deea5b0fec41c94c136cf115597227",
-            v4DeployBlockHex: "0x14af301"
+            v4DeployBlockHex: "0x14af301",
+            v3SubgraphID: "5zvR82QoaXYFyDEKLZ9t6v9adgnptxYpKpSbxtgVENFV"
         ),
         SupportedChain(
             id: "base",
@@ -65,7 +67,8 @@ struct SupportedChain: Identifiable, Hashable {
             wrappedNativeToken: "0x4200000000000000000000000000000000000006",
             v4PM: "0x7c5f5a4bbd8fd63184577525326123b519429bdc",
             v4SV: "0xa3c0c9b65bad0b08107aa264b0f3db444b867a71",
-            v4DeployBlockHex: "0x182d351"
+            v4DeployBlockHex: "0x182d351",
+            v3SubgraphID: "FUbEPQw1oMghy39fwWBFY5fE6MXPXZQtjncQy2cXdrNS"
         ),
         SupportedChain(
             id: "arbitrum",
@@ -80,7 +83,8 @@ struct SupportedChain: Identifiable, Hashable {
             wrappedNativeToken: "0x82aF49447D8a07e3bd95BD0d56f35241523fBab1",
             v4PM: "0xd88f38f930b7952f2db2432cb002e7abbf3dd869",
             v4SV: "0x76fd297e2d437cd7f76d50f01afe6160f86e9990",
-            v4DeployBlockHex: "0x11c0b8cd"
+            v4DeployBlockHex: "0x11c0b8cd",
+            v3SubgraphID: "FQ6JYszEKApsBpAmiHesRsd9Ygc6mzmpNRANeVQFYoVX"
         ),
         SupportedChain(
             id: "optimism",
@@ -95,7 +99,8 @@ struct SupportedChain: Identifiable, Hashable {
             wrappedNativeToken: "0x4200000000000000000000000000000000000006",
             v4PM: "0x3c3ea4b57a46241e54610e5f022e5c45859a1017",
             v4SV: "0xc18a3169788f4f75a170290584eca6395c75ecdb",
-            v4DeployBlockHex: "0x7ce22bb"
+            v4DeployBlockHex: "0x7ce22bb",
+            v3SubgraphID: "EgnS9YE1avupkvCNj9fHnJxppfEmNNywYJtghqiu2pd9"
         ),
         SupportedChain(
             id: "polygon",
@@ -110,7 +115,8 @@ struct SupportedChain: Identifiable, Hashable {
             wrappedNativeToken: "0x0d500B1d8E8eF31E21C99d1Db9A6444d3ADf1270",
             v4PM: "0x1ec2ebf4f37e7363fdfe3551602425af0b3ceef9",
             v4SV: "0x5ea1bd7974c8a611cbab0bdcafcb1d9cc9b3ba5a",
-            v4DeployBlockHex: "0x3fe0a2a"
+            v4DeployBlockHex: "0x3fe0a2a",
+            v3SubgraphID: "3hCPRGf4z88VC5rsBKU5AA9FBBq5nF3jbKJG7VZCbhjm"
         ),
         SupportedChain(
             id: "blast",
@@ -125,7 +131,8 @@ struct SupportedChain: Identifiable, Hashable {
             wrappedNativeToken: "0x4300000000000000000000000000000000000004",
             v4PM: "0x4ad2f4cca2682cbb5b950d660dd458a1d3f1baad",
             v4SV: "0x12a88ae16f46dce4e8b15368008ab3380885df30",
-            v4DeployBlockHex: "0xdb6164"
+            v4DeployBlockHex: "0xdb6164",
+            v3SubgraphID: "2LHovKznvo8YmKC9ZprPjsYAZDCc4K5q4AYz8s3cnQn1"
         ),
         SupportedChain(
             id: "palm",
@@ -140,7 +147,8 @@ struct SupportedChain: Identifiable, Hashable {
             wrappedNativeToken: "0x0000000000000000000000000000000000000000",
             v4PM: nil,
             v4SV: nil,
-            v4DeployBlockHex: nil
+            v4DeployBlockHex: nil,
+            v3SubgraphID: nil
         ),
         SupportedChain(
             id: "avalanche",
@@ -155,7 +163,8 @@ struct SupportedChain: Identifiable, Hashable {
             wrappedNativeToken: "0xB31f66AA3C1e785363F0875A1B74E27b85FD66c7",
             v4PM: nil,
             v4SV: nil,
-            v4DeployBlockHex: nil
+            v4DeployBlockHex: nil,
+            v3SubgraphID: "3Pwd3cqFKbqKAyaJfGUVmJJ7oYbFQLDa19iB27iMxebD"
         ),
         SupportedChain(
             id: "celo",
@@ -170,7 +179,8 @@ struct SupportedChain: Identifiable, Hashable {
             wrappedNativeToken: "0x471EcE3750Da237f93B8E339c536989b8978a438",
             v4PM: nil,
             v4SV: nil,
-            v4DeployBlockHex: nil
+            v4DeployBlockHex: nil,
+            v3SubgraphID: "9nh6Ums63wFcoZpmegyPcAFtY3CAzQc3S6cuERALYMqa"
         ),
         SupportedChain(
             id: "linea",
@@ -185,7 +195,8 @@ struct SupportedChain: Identifiable, Hashable {
             wrappedNativeToken: "0xE5D7C2a44fA3fAF9A34fD5E24D6fB95f27f7B4F0",
             v4PM: nil,
             v4SV: nil,
-            v4DeployBlockHex: nil
+            v4DeployBlockHex: nil,
+            v3SubgraphID: nil
         ),
         SupportedChain(
             id: "mantle",
@@ -200,7 +211,8 @@ struct SupportedChain: Identifiable, Hashable {
             wrappedNativeToken: "0xdEAddEaDdeadDEadDEADDEAddEADDEAddead1111",
             v4PM: nil,
             v4SV: nil,
-            v4DeployBlockHex: nil
+            v4DeployBlockHex: nil,
+            v3SubgraphID: nil
         ),
         SupportedChain(
             id: "zksync",
@@ -215,7 +227,8 @@ struct SupportedChain: Identifiable, Hashable {
             wrappedNativeToken: "0x5AEA5775959fBC2557Cc8789bC1bf90A239D9a91",
             v4PM: nil,
             v4SV: nil,
-            v4DeployBlockHex: nil
+            v4DeployBlockHex: nil,
+            v3SubgraphID: "4JMH4wKEjWscBUWau5BtogzYQLUV1eyEGpEtj8LsEuyk"
         ),
         SupportedChain(
             id: "bsc",
@@ -230,7 +243,8 @@ struct SupportedChain: Identifiable, Hashable {
             wrappedNativeToken: "0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c",
             v4PM: nil,
             v4SV: nil,
-            v4DeployBlockHex: nil
+            v4DeployBlockHex: nil,
+            v3SubgraphID: "8f1KyiuNYiNGrjagzEVpf6k6KkPG517prtjdrJihgHw"
         ),
         SupportedChain(
             id: "megaeth",
@@ -245,7 +259,8 @@ struct SupportedChain: Identifiable, Hashable {
             wrappedNativeToken: "0x4200000000000000000000000000000000000006",
             v4PM: nil,
             v4SV: nil,
-            v4DeployBlockHex: nil
+            v4DeployBlockHex: nil,
+            v3SubgraphID: nil
         ),
         SupportedChain(
             id: "monad",
@@ -260,7 +275,8 @@ struct SupportedChain: Identifiable, Hashable {
             wrappedNativeToken: "0x3bd359C1119dA7Da1D913D1C4D2B7c461115433A",
             v4PM: nil,
             v4SV: nil,
-            v4DeployBlockHex: nil
+            v4DeployBlockHex: nil,
+            v3SubgraphID: nil
         ),
         SupportedChain(
             id: "unichain",
@@ -275,7 +291,8 @@ struct SupportedChain: Identifiable, Hashable {
             wrappedNativeToken: "0x4200000000000000000000000000000000000006",
             v4PM: "0x4529a01c7a0410167c5740c487a8de60232617bf",
             v4SV: "0x86e8631a016f9068c3f085faf484ee3f5fdee8f2",
-            v4DeployBlockHex: "0x680f5f"
+            v4DeployBlockHex: "0x680f5f",
+            v3SubgraphID: "BCfy6Vw9No3weqVq9NhyGo4FkVCJep1ZN9RMJj5S32fX"
         )
     ]
 

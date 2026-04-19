@@ -360,34 +360,49 @@ struct PositionCard: View {
                     }
                 }
                 // Row 4: fees + token ID
-                HStack(spacing: 6) {
-                    Group {
-                        if let feesUSD = pos.feesUSDLabel {
-                            Text("fees: \(feesUSD)")
-                        } else if let err = pos.feesError {
-                            HStack(spacing: 3) {
-                                Text("fees: –")
-                                Button {
-                                    NSPasteboard.general.clearContents()
-                                    NSPasteboard.general.setString(err, forType: .string)
-                                } label: {
-                                    Image(systemName: "exclamationmark.circle")
-                                        .font(.caption2)
-                                        .foregroundStyle(.orange)
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(spacing: 6) {
+                        Group {
+                            if let feesUSD = pos.feesUSDLabel {
+                                Text("unclaimed fees: \(feesUSD)")
+                            } else if let err = pos.feesError {
+                                HStack(spacing: 3) {
+                                    Text("unclaimed fees: –")
+                                    Button {
+                                        NSPasteboard.general.clearContents()
+                                        NSPasteboard.general.setString(err, forType: .string)
+                                    } label: {
+                                        Image(systemName: "exclamationmark.circle")
+                                            .font(.caption2)
+                                            .foregroundStyle(.orange)
+                                    }
+                                    .buttonStyle(.plain)
+                                    .help(err)
                                 }
-                                .buttonStyle(.plain)
-                                .help(err)
+                            } else {
+                                Text("unclaimed fees: \(pos.feesLabel)")
                             }
-                        } else {
-                            Text("fees: \(pos.feesLabel)")
+                        }
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        Spacer()
+                        if pos.allTimeFeesUSDLabel == nil {
+                            Text("#\(pos.tokenId)")
+                                .font(.caption2)
+                                .foregroundStyle(.tertiary)
                         }
                     }
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    Spacer()
-                    Text("#\(pos.tokenId)")
-                        .font(.caption2)
-                        .foregroundStyle(.tertiary)
+                    if let allTime = pos.allTimeFeesUSDLabel {
+                        HStack(spacing: 6) {
+                            Text("all-time fees: \(allTime)")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                            Text("#\(pos.tokenId)")
+                                .font(.caption2)
+                                .foregroundStyle(.tertiary)
+                        }
+                    }
                 }
             }
             .padding(.horizontal, 12)
