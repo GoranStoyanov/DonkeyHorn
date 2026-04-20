@@ -40,6 +40,7 @@ A macOS menu bar app for monitoring your [Uniswap v3](https://uniswap.org) and [
   - bootstrap follow-ups run per chain (accelerated while in progress)
   - in-app bootstrap status shows live countdown to next auto-refresh
   - ownership cache avoids rescanning full history every refresh
+- **Claimed fee history** (opt-in): scans on-chain `Collect` events to show total historical claimed fees per v3 position. Enable via *Settings → Track Claimed Fees*. Disabled by default — the scan makes many `eth_getLogs` requests and can be noticeably request-heavy on fast-block chains like Base or Arbitrum. Results are cached locally and only new blocks are re-scanned on subsequent refreshes.
 - Chain icons in UI (downloaded once from CoinGecko and cached locally)
 - Reads data directly from chain RPC (Infura endpoints derived from your API key), with no third-party indexer
 - Click any position to open it on app.uniswap.org

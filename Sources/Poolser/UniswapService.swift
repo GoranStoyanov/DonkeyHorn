@@ -33,6 +33,7 @@ final class UniswapService: ObservableObject {
     private var refreshIntervalCancellable: AnyCancellable?
     private var activeLoadTask: Task<Void, Never>?
     private var bootstrapFollowUpTask: Task<Void, Never>?
+    private var feeHistoryTask: Task<Void, Never>?
     private var bootstrapCountdownTimer: Timer?
     private var bootstrapFollowUpDeadlineByChainID: [String: Date] = [:]
     private var loadGeneration: UInt64 = 0
@@ -70,6 +71,7 @@ final class UniswapService: ObservableObject {
     private func startLoad() {
         activeLoadTask?.cancel()
         bootstrapFollowUpTask?.cancel()
+        feeHistoryTask?.cancel()
         bootstrapFollowUpDeadlineByChainID = [:]
         stopBootstrapCountdownTimer()
         loadGeneration &+= 1
@@ -125,6 +127,12 @@ final class UniswapService: ObservableObject {
         )
         isLoading = false
         lastUpdated = Date()
+
+        // Launch fee history scan in background — positions are already displayed.
+        let v3Positions = positions.filter { !$0.isV4 && $0.error == nil }
+        if !v3Positions.isEmpty && AppSettings.shared.trackClaimedFees {
+            startFeeHistoryLoad(v3Positions: v3Positions, wallet: wallet, generation: generation)
+        }
     }
 
     private func scheduleBootstrapFollowUpIfNeeded(chainIDs: [String], generation: UInt64) {
@@ -283,6 +291,67 @@ final class UniswapService: ObservableObject {
         }
     }
 
+    // MARK: - Fee history (background)
+
+    private func startFeeHistoryLoad(v3Positions: [Position], wallet: String, generation: UInt64) {
+        feeHistoryTask?.cancel()
+        feeHistoryTask = Task { [weak self] in
+            guard let self else { return }
+            let byChain = Dictionary(grouping: v3Positions, by: \.chainID)
+            for (chainID, chainPositions) in byChain {
+                guard !Task.isCancelled, isCurrentGeneration(generation) else { return }
+                guard let chain = SupportedChain.byID(chainID),
+                      let deployBlock = chain.v3DeployBlock,
+                      let nfpm = chain.v3NFPM,
+                      let rpcURL = AppSettings.shared.infuraRPCURL(for: chain) else { continue }
+                let eth = EthereumClient(rpcURL: rpcURL)
+                guard let currentBlock = try? await eth.ethBlockNumber() else { continue }
+                guard !Task.isCancelled, isCurrentGeneration(generation) else { return }
+                let feeResult = await FeeHistoryService.scan(
+                    positions: chainPositions,
+                    nfpm: nfpm,
+                    deployBlock: deployBlock,
+                    currentBlock: currentBlock,
+                    eth: eth,
+                    chainID: chainID,
+                    wallet: wallet
+                )
+                guard !Task.isCancelled, isCurrentGeneration(generation) else { return }
+                let tokenAddrs = Array(Set(chainPositions.flatMap { [$0.token0.lowercased(), $0.token1.lowercased()] }))
+                let priceMap = await priceService.fetchPrices(
+                    for: tokenAddrs,
+                    coingeckoPlatformID: chain.coingeckoPlatformID,
+                    defiLlamaChainKey: chain.defiLlamaChainKey
+                )
+                guard !Task.isCancelled, isCurrentGeneration(generation) else { return }
+                applyFeeHistory(feeResult, priceMap: priceMap, chainID: chainID)
+                if feeResult.bootstrapInProgress {
+                    LogStore.shared.log("fee history [\(chain.displayName)]: syncing…", level: .info)
+                } else {
+                    LogStore.shared.log("fee history [\(chain.displayName)]: complete", level: .info)
+                }
+            }
+        }
+    }
+
+    private func applyFeeHistory(
+        _ result: FeeHistoryService.Result,
+        priceMap: [String: Double],
+        chainID: String
+    ) {
+        for i in positions.indices {
+            guard positions[i].chainID == chainID, !positions[i].isV4, positions[i].error == nil else { continue }
+            positions[i].feeHistoryBootstrapping = result.bootstrapInProgress
+            guard let claimed = result.fees[positions[i].tokenId] else { continue }
+            positions[i].claimedFees0 = claimed.amount0
+            positions[i].claimedFees1 = claimed.amount1
+            var claimedUSD = 0.0; var hasUSD = false
+            if let px = priceMap[positions[i].token0.lowercased()], claimed.amount0 > 0 { claimedUSD += claimed.amount0 * px; hasUSD = true }
+            if let px = priceMap[positions[i].token1.lowercased()], claimed.amount1 > 0 { claimedUSD += claimed.amount1 * px; hasUSD = true }
+            if hasUSD { positions[i].claimedUSD = claimedUSD }
+        }
+    }
+
     private func loadChain(wallet: String, chain: SupportedChain) async -> ChainLoadResult {
         guard let rpcURL = AppSettings.shared.infuraRPCURL(for: chain) else {
             return ChainLoadResult(
@@ -434,7 +503,9 @@ final class UniswapService: ObservableObject {
                     feeRaw:    feeRaw,
                     fees0:     fees0,     fees1:     fees1,
                     tickLower: tickLower, tickUpper: tickUpper,
-                    liquidity: liquidity
+                    liquidity: liquidity,
+                    dec0:      m0.decimals,
+                    dec1:      m1.decimals
                 ))
             } catch {
                 rawPositions.append(Position(
@@ -494,6 +565,13 @@ final class UniswapService: ObservableObject {
             } catch { /* inRange stays nil */ }
 
             finalPositions.append(p)
+        }
+
+        // Mark v3 positions as pending fee history scan (background task will fill in claimed amounts).
+        if chain.v3DeployBlock != nil {
+            for i in finalPositions.indices where finalPositions[i].error == nil {
+                finalPositions[i].feeHistoryBootstrapping = true
+            }
         }
 
         return (finalPositions, totalFeesUSD, nil)

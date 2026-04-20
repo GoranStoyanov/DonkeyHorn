@@ -17,7 +17,11 @@ final class AppSettings: ObservableObject {
     @Published var walletAddress: String {
         didSet {
             UserDefaults.standard.set(walletAddress, forKey: "walletAddress")
-            if walletAddress != oldValue { Task { @MainActor in LogStore.shared.clear() } }
+            if walletAddress != oldValue {
+                Task { @MainActor in LogStore.shared.clear() }
+                let old = oldValue
+                Task { FeeHistoryService.clearCache(wallet: old) }
+            }
         }
     }
     @Published var infuraAPIKey: String {
@@ -85,6 +89,9 @@ final class AppSettings: ObservableObject {
     @Published var flashOnValueChange: Bool {
         didSet { UserDefaults.standard.set(flashOnValueChange, forKey: "flashOnValueChange") }
     }
+    @Published var trackClaimedFees: Bool {
+        didSet { UserDefaults.standard.set(trackClaimedFees, forKey: "trackClaimedFees") }
+    }
     @Published var loginItemError: String?
 
     private init() {
@@ -114,6 +121,7 @@ final class AppSettings: ObservableObject {
         v4BootstrapMaxChunksPerRefresh = Self.clamp(bootstrapRaw, min: 5, max: 200)
 
         flashOnValueChange = ud.object(forKey: "flashOnValueChange") as? Bool ?? true
+        trackClaimedFees = ud.object(forKey: "trackClaimedFees") as? Bool ?? false
 
         // Sync stored preference with the actual service status on launch
         let actuallyEnabled = SMAppService.mainApp.status == .enabled

@@ -359,7 +359,7 @@ struct PositionCard: View {
                             .foregroundStyle(.secondary)
                     }
                 }
-                // Row 4: fees + token ID
+                // Row 4: fees + claimed + token ID
                 HStack(spacing: 6) {
                     Group {
                         if let feesUSD = pos.feesUSDLabel {
@@ -384,6 +384,21 @@ struct PositionCard: View {
                     }
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                    if let claimedLabel = pos.claimedUSDLabel ?? pos.claimedFeesLabel {
+                        Text("·")
+                            .font(.caption)
+                            .foregroundStyle(.tertiary)
+                        Text("claimed: \(claimedLabel)")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    } else if pos.feeHistoryBootstrapping {
+                        Text("·")
+                            .font(.caption)
+                            .foregroundStyle(.tertiary)
+                        Text("claimed: syncing…")
+                            .font(.caption)
+                            .foregroundStyle(.tertiary)
+                    }
                     Spacer()
                     Text("#\(pos.tokenId)")
                         .font(.caption2)

@@ -14,6 +14,7 @@ struct SettingsView: View {
     @State private var draftV4BootstrapMaxChunksPerRefresh: Int
     @State private var draftLaunchAtLogin: Bool
     @State private var draftFlashOnValueChange: Bool
+    @State private var draftTrackClaimedFees: Bool
 
     init(onDismiss: (() -> Void)? = nil) {
         self.onDismiss = onDismiss
@@ -28,6 +29,7 @@ struct SettingsView: View {
         _draftV4BootstrapMaxChunksPerRefresh = State(initialValue: s.v4BootstrapMaxChunksPerRefresh)
         _draftLaunchAtLogin = State(initialValue: s.launchAtLogin)
         _draftFlashOnValueChange = State(initialValue: s.flashOnValueChange)
+        _draftTrackClaimedFees = State(initialValue: s.trackClaimedFees)
     }
 
     var body: some View {
@@ -195,6 +197,23 @@ struct SettingsView: View {
                             Divider().opacity(0.35).padding(.leading, 14)
                             HStack {
                                 VStack(alignment: .leading, spacing: 2) {
+                                    Text("Track Claimed Fees")
+                                        .font(.system(size: 13))
+                                    Text("Scans on-chain Collect events to show historical claimed fees per v3 position. Makes additional eth_getLogs requests — can be request-heavy on fast-block chains (Base, Arbitrum).")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                }
+                                Spacer()
+                                Toggle("", isOn: $draftTrackClaimedFees)
+                                    .labelsHidden()
+                            }
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 12)
+
+                            Divider().opacity(0.35).padding(.leading, 14)
+                            HStack {
+                                VStack(alignment: .leading, spacing: 2) {
                                     Text("Flash on Value Change")
                                         .font(.system(size: 13))
                                     Text("Briefly animates the menu bar icon when your total unclaimed fees change after a refresh")
@@ -240,6 +259,7 @@ struct SettingsView: View {
                     settings.v4LogMaxConcurrentRequests = draftV4LogMaxConcurrentRequests
                     settings.v4BootstrapMaxChunksPerRefresh = draftV4BootstrapMaxChunksPerRefresh
                     settings.flashOnValueChange = draftFlashOnValueChange
+                    settings.trackClaimedFees = draftTrackClaimedFees
                     if settings.launchAtLogin != draftLaunchAtLogin {
                         Task { await settings.setLaunchAtLogin(draftLaunchAtLogin) }
                     }

@@ -189,6 +189,70 @@ struct EthereumClient {
         throw lastError ?? Err.rpc("unknown")
     }
 
+    /// eth_getLogs with OR semantics per topic position.
+    /// Each element is nil (match any) or an array of hex strings (OR match).
+    func ethGetLogsOR(
+        address: String,
+        topics: [[String]?],
+        fromBlock: String,
+        toBlock: String = "latest",
+        context: String? = nil
+    ) async throws -> [[String: Any]] {
+        let ctx = context.map { " \($0)" } ?? ""
+        var lastError: Error?
+        for attempt in 0...logsMaxRetries {
+            do {
+                await configureLimiterFromSettings()
+                let jsonTopics: [Any] = topics.map { t -> Any in
+                    guard let t = t else { return NSNull() }
+                    return t.count == 1 ? t[0] : t
+                }
+                await Self.limiter.acquire(credits: costEthGetLogs)
+                let body = try JSONSerialization.data(withJSONObject: [
+                    "jsonrpc": "2.0",
+                    "method":  "eth_getLogs",
+                    "params":  [["address":   address,
+                                 "topics":    jsonTopics,
+                                 "fromBlock": fromBlock,
+                                 "toBlock":   toBlock]],
+                    "id":      1
+                ] as [String: Any])
+                var req = URLRequest(url: rpcURL)
+                req.httpMethod = "POST"
+                req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+                req.httpBody = body
+                req.timeoutInterval = 30
+                log("getLogs(OR)\(ctx) → \(short(address)) \(fromBlock)–\(toBlock)", level: .request)
+                let (responseData, response) = try await URLSession.shared.data(for: req)
+                if let http = response as? HTTPURLResponse, !(200...299).contains(http.statusCode) {
+                    throw Err.rpc("HTTP \(http.statusCode)")
+                }
+                guard let json = try? JSONSerialization.jsonObject(with: responseData) as? [String: Any] else {
+                    log("getLogs(OR)\(ctx) ← bad JSON (\(debugBody(responseData)))", level: .error)
+                    throw Err.badJSON
+                }
+                if let err = json["error"] as? [String: Any] {
+                    let msg = err["message"] as? String ?? "unknown error"
+                    log("getLogs(OR)\(ctx) ← error: \(msg)", level: .error)
+                    throw Err.rpc(msg)
+                }
+                guard let result = json["result"] as? [[String: Any]] else {
+                    log("getLogs(OR)\(ctx) ← no result \(short(address)) \(fromBlock)–\(toBlock)", level: .error)
+                    throw Err.noResult
+                }
+                log("getLogs(OR)\(ctx) ← \(result.count) events", level: .response)
+                return result
+            } catch {
+                lastError = error
+                guard shouldRetry(error), attempt < logsMaxRetries else { throw error }
+                let next = attempt + 1
+                log("getLogs(OR)\(ctx) retry \(next)/\(logsMaxRetries) \(fromBlock)–\(toBlock)", level: .info)
+                try await sleepBeforeRetry(attempt: attempt, error: error)
+            }
+        }
+        throw lastError ?? Err.rpc("unknown")
+    }
+
     func ethCall(to: String, data: Data) async throws -> Data {
         let selector = data.count >= 4 ? data.prefix(4).hexString : data.hexString
         var lastError: Error?

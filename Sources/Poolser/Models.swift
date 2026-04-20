@@ -19,8 +19,14 @@ struct Position: Identifiable {
     let liquidity: Double
     var amount0: Double = 0   // current token0 in position (decimal-adjusted)
     var amount1: Double = 0   // current token1 in position
+    var dec0: Int = 18
+    var dec1: Int = 18
     var usd: Double?          // fees value in USD
     var positionUSD: Double?  // total position liquidity value in USD
+    var claimedFees0: Double = 0
+    var claimedFees1: Double = 0
+    var claimedUSD: Double? = nil
+    var feeHistoryBootstrapping: Bool = false
     var currentTick: Int?
     var inRange: Bool?
     var error: String?
@@ -61,6 +67,18 @@ struct Position: Identifiable {
         return String(format: "$%.2f", usd)
     }
 
+
+    var claimedUSDLabel: String? {
+        guard let usd = claimedUSD, usd > 0 else { return nil }
+        return String(format: "$%.2f", usd)
+    }
+
+    var claimedFeesLabel: String? {
+        var parts: [String] = []
+        if claimedFees0 > 0 { parts.append(trimNum(claimedFees0) + " " + sym0) }
+        if claimedFees1 > 0 { parts.append(trimNum(claimedFees1) + " " + sym1) }
+        return parts.isEmpty ? nil : parts.joined(separator: " + ")
+    }
 
     var versionLabel: String { isV4 ? "v4" : "v3" }
     var chainLabel: String { chainName }

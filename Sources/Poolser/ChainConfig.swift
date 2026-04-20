@@ -14,6 +14,9 @@ struct SupportedChain: Identifiable, Hashable {
     let v4PM: String?
     let v4SV: String?
     let v4DeployBlockHex: String?
+    let v3DeployBlock: Int?
+    /// Approximate average block time in seconds — used to normalize fee history scan coverage.
+    let blockTimeSeconds: Double
 
     /// Chain slug used in Uniswap web app URLs (e.g. ?chain=mainnet)
     var uniswapChainSlug: String {
@@ -51,6 +54,8 @@ struct SupportedChain: Identifiable, Hashable {
             v4PM: "0xbd216513d74c8cf14cf4747e6aaa6420ff64ee9e",
             v4SV: "0x7ffe42c4a5deea5b0fec41c94c136cf115597227",
             v4DeployBlockHex: "0x14af301",
+            v3DeployBlock: 12_369_621,
+            blockTimeSeconds: 12,
         ),
         SupportedChain(
             id: "base",
@@ -66,6 +71,8 @@ struct SupportedChain: Identifiable, Hashable {
             v4PM: "0x7c5f5a4bbd8fd63184577525326123b519429bdc",
             v4SV: "0xa3c0c9b65bad0b08107aa264b0f3db444b867a71",
             v4DeployBlockHex: "0x182d351",
+            v3DeployBlock: 1_371_680,
+            blockTimeSeconds: 2,
         ),
         SupportedChain(
             id: "arbitrum",
@@ -81,6 +88,8 @@ struct SupportedChain: Identifiable, Hashable {
             v4PM: "0xd88f38f930b7952f2db2432cb002e7abbf3dd869",
             v4SV: "0x76fd297e2d437cd7f76d50f01afe6160f86e9990",
             v4DeployBlockHex: "0x11c0b8cd",
+            v3DeployBlock: 222_817,
+            blockTimeSeconds: 0.25,
         ),
         SupportedChain(
             id: "optimism",
@@ -96,6 +105,8 @@ struct SupportedChain: Identifiable, Hashable {
             v4PM: "0x3c3ea4b57a46241e54610e5f022e5c45859a1017",
             v4SV: "0xc18a3169788f4f75a170290584eca6395c75ecdb",
             v4DeployBlockHex: "0x7ce22bb",
+            v3DeployBlock: 3_936_000,
+            blockTimeSeconds: 2,
         ),
         SupportedChain(
             id: "polygon",
@@ -111,6 +122,8 @@ struct SupportedChain: Identifiable, Hashable {
             v4PM: "0x1ec2ebf4f37e7363fdfe3551602425af0b3ceef9",
             v4SV: "0x5ea1bd7974c8a611cbab0bdcafcb1d9cc9b3ba5a",
             v4DeployBlockHex: "0x3fe0a2a",
+            v3DeployBlock: 22_757_547,
+            blockTimeSeconds: 2,
         ),
         SupportedChain(
             id: "blast",
@@ -126,6 +139,8 @@ struct SupportedChain: Identifiable, Hashable {
             v4PM: "0x4ad2f4cca2682cbb5b950d660dd458a1d3f1baad",
             v4SV: "0x12a88ae16f46dce4e8b15368008ab3380885df30",
             v4DeployBlockHex: "0xdb6164",
+            v3DeployBlock: 400_000,
+            blockTimeSeconds: 2,
         ),
         SupportedChain(
             id: "palm",
@@ -141,6 +156,8 @@ struct SupportedChain: Identifiable, Hashable {
             v4PM: nil,
             v4SV: nil,
             v4DeployBlockHex: nil,
+            v3DeployBlock: nil,
+            blockTimeSeconds: 5,
         ),
         SupportedChain(
             id: "avalanche",
@@ -156,6 +173,8 @@ struct SupportedChain: Identifiable, Hashable {
             v4PM: nil,
             v4SV: nil,
             v4DeployBlockHex: nil,
+            v3DeployBlock: 27_832_972,
+            blockTimeSeconds: 2,
         ),
         SupportedChain(
             id: "celo",
@@ -171,6 +190,8 @@ struct SupportedChain: Identifiable, Hashable {
             v4PM: nil,
             v4SV: nil,
             v4DeployBlockHex: nil,
+            v3DeployBlock: 13_916_355,
+            blockTimeSeconds: 5,
         ),
         SupportedChain(
             id: "linea",
@@ -186,6 +207,8 @@ struct SupportedChain: Identifiable, Hashable {
             v4PM: nil,
             v4SV: nil,
             v4DeployBlockHex: nil,
+            v3DeployBlock: nil,
+            blockTimeSeconds: 3,
         ),
         SupportedChain(
             id: "mantle",
@@ -201,6 +224,8 @@ struct SupportedChain: Identifiable, Hashable {
             v4PM: nil,
             v4SV: nil,
             v4DeployBlockHex: nil,
+            v3DeployBlock: nil,
+            blockTimeSeconds: 2,
         ),
         SupportedChain(
             id: "zksync",
@@ -216,6 +241,8 @@ struct SupportedChain: Identifiable, Hashable {
             v4PM: nil,
             v4SV: nil,
             v4DeployBlockHex: nil,
+            v3DeployBlock: 14_000_000,
+            blockTimeSeconds: 1,
         ),
         SupportedChain(
             id: "bsc",
@@ -231,6 +258,8 @@ struct SupportedChain: Identifiable, Hashable {
             v4PM: nil,
             v4SV: nil,
             v4DeployBlockHex: nil,
+            v3DeployBlock: 26_975_000,
+            blockTimeSeconds: 3,
         ),
         SupportedChain(
             id: "megaeth",
@@ -246,6 +275,8 @@ struct SupportedChain: Identifiable, Hashable {
             v4PM: nil,
             v4SV: nil,
             v4DeployBlockHex: nil,
+            v3DeployBlock: 0,
+            blockTimeSeconds: 0.1,
         ),
         SupportedChain(
             id: "monad",
@@ -261,6 +292,8 @@ struct SupportedChain: Identifiable, Hashable {
             v4PM: nil,
             v4SV: nil,
             v4DeployBlockHex: nil,
+            v3DeployBlock: 0,
+            blockTimeSeconds: 1,
         ),
         SupportedChain(
             id: "unichain",
@@ -276,6 +309,8 @@ struct SupportedChain: Identifiable, Hashable {
             v4PM: "0x4529a01c7a0410167c5740c487a8de60232617bf",
             v4SV: "0x86e8631a016f9068c3f085faf484ee3f5fdee8f2",
             v4DeployBlockHex: "0x680f5f",
+            v3DeployBlock: 0,
+            blockTimeSeconds: 1,
         )
     ]
 
