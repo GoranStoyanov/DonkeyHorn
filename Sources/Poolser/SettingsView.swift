@@ -248,6 +248,11 @@ struct SettingsView: View {
             Divider().opacity(0.35)
 
             HStack {
+                let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?"
+                let build   = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "?"
+                Text("v\(version) (\(build))")
+                    .font(.system(size: 10, design: .monospaced))
+                    .foregroundStyle(.tertiary)
                 Spacer()
                 Button("Save & Refresh") {
                     settings.walletAddress = draftWalletAddress
